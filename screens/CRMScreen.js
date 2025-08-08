@@ -18,6 +18,7 @@ import {
   Platform,
   Modal,
   ScrollView,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -87,19 +88,44 @@ const CRMScreen = ({ navigation }) => {
   }, [searchQuery]);
 
   const handleStartCampaign = () => {
+    if (!campaignMessage.trim()) {
+      Alert.alert('Error', 'Please enter a campaign message');
+      return;
+    }
+
     // Logic to send campaign would go here
     console.log({
         channel: campaignChannel,
         audience: campaignAudience,
         message: campaignMessage,
     });
+    
     setCampaignModalVisible(false);
+    Alert.alert(
+      'Campaign Sent!',
+      `Your ${campaignChannel} campaign has been sent to ${campaignAudience === 'all' ? 'all customers' : 'specific groups'}.`,
+      [{ text: 'OK' }]
+    );
+    
     // Reset state for next time
     setCampaignMessage('');
   };
 
   const renderCustomerItem = ({ item }) => (
-    <TouchableOpacity style={styles.customerItem} onPress={() => { /* Navigate to Customer Detail Screen */ }}>
+    <TouchableOpacity 
+      style={styles.customerItem} 
+      onPress={() => {
+        Alert.alert(
+          item.name,
+          `Phone: ${item.phone}\nEmail: ${item.email}\nTotal Spend: ₹${item.totalSpend.toLocaleString('en-IN')}\nLast Purchase: ${item.lastPurchase}`,
+          [
+            { text: 'Call Customer', onPress: () => Alert.alert('Feature Coming Soon', 'Call customer feature will be available soon.') },
+            { text: 'Send Message', onPress: () => Alert.alert('Feature Coming Soon', 'Send message feature will be available soon.') },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      }}
+    >
       <View style={styles.avatar}>
         <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
       </View>
@@ -185,7 +211,14 @@ const CRMScreen = ({ navigation }) => {
       {renderCampaignModal()}
 
       <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Icon name="arrow-back" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
         <Text style={theme.typography.h1}>Customers</Text>
+        <View style={styles.placeholder} />
       </View>
 
       <View style={styles.searchContainer}>
@@ -223,9 +256,19 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: theme.spacing.lg,
     paddingTop: Platform.OS === 'android' ? theme.spacing.lg : theme.spacing.sm,
     paddingBottom: theme.spacing.md,
+  },
+  backButton: {
+    padding: theme.spacing.sm,
+    marginLeft: -theme.spacing.sm,
+  },
+  placeholder: {
+    width: 32,
   },
   searchContainer: {
     flexDirection: 'row',

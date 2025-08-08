@@ -1,6 +1,6 @@
 /**
- * BusinessCardScreen.js
- * Digital business card creation and preview screen
+ * BusinessCategoryScreen.js
+ * Select a business category and basic details before creating a business card
  */
 
 import React, { useState } from 'react';
@@ -11,350 +11,220 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
+  TextInput,
+  StatusBar,
+  Platform,
   Alert,
-  Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-const { width: screenWidth } = Dimensions.get('window');
+const theme = {
+  colors: {
+    primary: '#4A69E2',
+    background: '#F7F8FC',
+    surface: '#FFFFFF',
+    text: '#121212',
+    subtleText: '#6E717A',
+    success: '#2E7D32',
+    danger: '#C62828',
+    warning: '#FFAB00',
+    border: '#E8E9F1',
+    white: '#FFFFFF',
+  },
+  spacing: {
+    xs: 4, sm: 8, md: 16, lg: 24, xl: 32,
+  },
+  typography: {
+    h1: { fontFamily: 'Poppins-Bold', fontSize: 24, color: '#121212' },
+    h2: { fontFamily: 'Poppins-SemiBold', fontSize: 18, color: '#121212' },
+    body: { fontFamily: 'Poppins-Regular', fontSize: 16, color: '#6E717A' },
+    subtext: { fontFamily: 'Poppins-Regular', fontSize: 14, color: '#6E717A' },
+    label: { fontFamily: 'Poppins-Medium', fontSize: 12, color: '#6E717A' },
+  },
+  borderRadius: { sm: 8, md: 16, lg: 24, full: 999 },
+  shadow: {
+    shadowColor: '#4A69E2',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+};
 
-const BusinessCardScreen = ({ navigation, route }) => {
-  const { category, businessName, phoneNumber } = route.params || {};
-  const [isCreating, setIsCreating] = useState(false);
+const CATEGORIES = [
+  { key: 'Retail', icon: 'storefront' },
+  { key: 'Cafe', icon: 'local-cafe' },
+  { key: 'Salon', icon: 'content-cut' },
+  { key: 'Grocery', icon: 'local-grocery-store' },
+  { key: 'Restaurant', icon: 'restaurant' },
+  { key: 'Pharmacy', icon: 'medical-services' },
+  { key: 'Electronics', icon: 'devices' },
+  { key: 'Services', icon: 'handyman' },
+];
 
-  const handleCreateBusinessCard = async () => {
-    setIsCreating(true);
-    
-    // Simulate business card creation process
-    setTimeout(() => {
-      setIsCreating(false);
-      Alert.alert(
-        'Success!',
-        'Your digital business card has been created successfully.',
-        [
-          {
-            text: 'Continue',
-            onPress: () => {
-              // Navigate to next screen or main app
-              navigation.navigate('Dashboard'); // Adjust as needed
-            }
-          }
-        ]
-      );
-    }, 2000);
-  };
+const BusinessCategoryScreen = ({ navigation }) => {
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [businessName, setBusinessName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
 
-  const handleSkipForNow = () => {
-    // Navigate directly to Home screen
-    navigation.navigate('Home');
-  };
-
-  const goBack = () => {
-    navigation.goBack();
+  const handleContinue = () => {
+    if (!selectedCategory) {
+      Alert.alert('Select Category', 'Please choose a business category.');
+      return;
+    }
+    if (!businessName.trim()) {
+      Alert.alert('Business Name', 'Please enter your business name.');
+      return;
+    }
+    navigation.navigate('BusinessCardScreen', {
+      category: selectedCategory,
+      businessName: businessName.trim(),
+      phoneNumber: phoneNumber.trim(),
+    });
   };
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={goBack} style={styles.backButton}>
-          <Icon name="close" size={24} color="#212121" />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+          <Icon name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Business Card</Text>
-        <View style={styles.placeholder} />
+        <Text style={styles.headerTitle}>Business Category</Text>
+        <View style={styles.headerBtn} />
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Title Section */}
-        <View style={styles.titleContainer}>
-          <Text style={styles.mainTitle}>Create your digital business card</Text>
-          <Text style={styles.subtitle}>
-            Share your contact information with customers and partners
-          </Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: theme.spacing.xl }}>
+        {/* Intro */}
+        <View style={styles.section}>
+          <Text style={theme.typography.h1}>Tell us about your business</Text>
+          <Text style={[theme.typography.body, { marginTop: theme.spacing.xs }]}>Select a category and add basic details to personalize your experience.</Text>
         </View>
 
-        {/* Business Card Preview */}
-        <View style={styles.previewContainer}>
-          <View style={styles.cardContainer}>
-            {/* Front Card */}
-            <View style={styles.businessCard}>
-              <View style={styles.cardBackground}>
-                {/* Decorative Pattern */}
-                <View style={styles.decorativePattern}>
-                  <View style={styles.patternLine1} />
-                  <View style={styles.patternLine2} />
-                  <View style={styles.patternCircle} />
-                </View>
-                
-                {/* Card Content */}
-                <View style={styles.cardContent}>
-                  <View style={styles.cardTextContainer}>
-                    <Text style={styles.cardBusinessName}>
-                      {businessName || 'BUSINESS NAME'}
-                    </Text>
-                    <Text style={styles.cardTagline}>
-                      PROFESSIONAL SERVICES AND CREATIVE EXECUTIVE
-                    </Text>
+        {/* Category Grid */}
+        <View style={styles.section}>
+          <Text style={theme.typography.h2}>Choose Category</Text>
+          <View style={styles.grid}>
+            {CATEGORIES.map((c) => {
+              const active = selectedCategory === c.key;
+              return (
+                <TouchableOpacity
+                  key={c.key}
+                  style={[styles.card, active && styles.cardActive]}
+                  onPress={() => setSelectedCategory(c.key)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.iconWrap, active && { backgroundColor: `${theme.colors.primary}15` }]}>
+                    <Icon name={c.icon} size={22} color={active ? theme.colors.primary : theme.colors.subtleText} />
                   </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Back Card (Stacked behind) */}
-            <View style={[styles.businessCard, styles.backCard]}>
-              <View style={styles.cardBackground}>
-                <View style={styles.decorativePattern}>
-                  <View style={styles.patternLine1} />
-                  <View style={styles.patternLine2} />
-                  <View style={styles.patternCircle} />
-                </View>
-              </View>
-            </View>
+                  <Text style={[styles.cardLabel, active && styles.cardLabelActive]}>{c.key}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
-        {/* Features List */}
-        <View style={styles.featuresContainer}>
-          <View style={styles.featureItem}>
-            <Icon name="phone" size={20} color="#2E7D32" />
-            <Text style={styles.featureText}>Contact information included</Text>
+        {/* Basic Details */}
+        <View style={styles.section}>
+          <Text style={theme.typography.h2}>Business Details</Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Business Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g., Sunrise Cafe"
+              placeholderTextColor={theme.colors.subtleText}
+              value={businessName}
+              onChangeText={setBusinessName}
+            />
           </View>
-          <View style={styles.featureItem}>
-            <Icon name="share" size={20} color="#2E7D32" />
-            <Text style={styles.featureText}>Easy sharing via QR code</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Icon name="edit" size={20} color="#2E7D32" />
-            <Text style={styles.featureText}>Customizable design and content</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Icon name="cloud" size={20} color="#2E7D32" />
-            <Text style={styles.featureText}>Always up-to-date information</Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Phone (optional)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g., 9876543210"
+              placeholderTextColor={theme.colors.subtleText}
+              keyboardType="phone-pad"
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+            />
           </View>
         </View>
+
+        {/* Continue */}
+        <TouchableOpacity
+          style={[styles.primaryButton, !selectedCategory && { opacity: 0.6 }]}
+          onPress={handleContinue}
+          disabled={!selectedCategory}
+        >
+          <Text style={styles.primaryButtonText}>Continue</Text>
+          <Icon name="arrow-forward" size={20} color={theme.colors.white} />
+        </TouchableOpacity>
       </ScrollView>
-
-      {/* Action Buttons */}
-      <View style={styles.bottomContainer}>
-        <TouchableOpacity
-          style={[styles.createButton, isCreating && styles.createButtonDisabled]}
-          onPress={handleCreateBusinessCard}
-          disabled={isCreating}
-        >
-          <Text style={styles.createButtonText}>
-            {isCreating ? 'Creating Business Card...' : 'Create Business Card'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.skipButton}
-          onPress={handleSkipForNow}
-          disabled={isCreating}
-        >
-          <Text style={styles.skipButtonText}>Skip for Now</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F4F6F8',
-  },
+  container: { flex: 1, backgroundColor: theme.colors.background },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: Platform.OS === 'android' ? theme.spacing.lg : theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: theme.colors.border,
   },
-  backButton: {
-    padding: 4,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#212121',
-    fontFamily: 'Poppins-SemiBold',
-  },
-  placeholder: {
-    width: 32,
-  },
-  scrollView: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  titleContainer: {
-    marginTop: 32,
-    marginBottom: 40,
-    alignItems: 'center',
-  },
-  mainTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#212121',
-    textAlign: 'center',
-    marginBottom: 12,
-    fontFamily: 'Poppins-Bold',
-    lineHeight: 32,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#757575',
-    textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: 20,
-    fontFamily: 'Poppins-Regular',
-  },
-  previewContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  cardContainer: {
-    position: 'relative',
-    width: screenWidth * 0.8,
-    height: 200,
-  },
-  businessCard: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 16,
-    position: 'absolute',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  backCard: {
-    transform: [{ translateX: 8 }, { translateY: 8 }],
-    zIndex: 1,
-  },
-  cardBackground: {
-    flex: 1,
-    backgroundColor: '#D4BFA0',
-    borderRadius: 16,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  decorativePattern: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: '60%',
-    height: '100%',
-  },
-  patternLine1: {
-    position: 'absolute',
-    top: 20,
-    right: -20,
-    width: 120,
-    height: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    transform: [{ rotate: '25deg' }],
-  },
-  patternLine2: {
-    position: 'absolute',
-    bottom: 40,
-    right: -30,
-    width: 150,
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    transform: [{ rotate: '15deg' }],
-  },
-  patternCircle: {
-    position: 'absolute',
-    top: 60,
-    right: 30,
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  headerBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontFamily: 'Poppins-SemiBold', fontSize: 18, color: theme.colors.text },
+  section: { paddingHorizontal: theme.spacing.lg, marginTop: theme.spacing.lg },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: theme.spacing.md },
+  card: {
+    width: '47%',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
+    marginRight: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  cardContent: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'flex-end',
-    zIndex: 2,
-  },
-  cardTextContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    padding: 16,
-    borderRadius: 8,
-    maxWidth: '75%',
-  },
-  cardBusinessName: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#212121',
-    marginBottom: 4,
-    fontFamily: 'Poppins-Bold',
-  },
-  cardTagline: {
-    fontSize: 8,
-    color: '#757575',
-    lineHeight: 12,
-    fontFamily: 'Poppins-Regular',
-  },
-  featuresContainer: {
-    marginBottom: 40,
-  },
-  featureItem: {
-    flexDirection: 'row',
+    borderColor: theme.colors.border,
     alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 8,
+    ...theme.shadow,
   },
-  featureText: {
-    marginLeft: 12,
-    fontSize: 16,
-    color: '#212121',
-    fontFamily: 'Poppins-Regular',
+  cardActive: { borderColor: theme.colors.primary, backgroundColor: '#FFFFFF' },
+  iconWrap: {
+    width: 44, height: 44, borderRadius: theme.borderRadius.full,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.background,
   },
-  bottomContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+  cardLabel: { marginTop: theme.spacing.sm, ...theme.typography.body, color: theme.colors.subtleText, fontFamily: 'Poppins-Medium' },
+  cardLabelActive: { color: theme.colors.primary },
+  inputGroup: { marginTop: theme.spacing.md },
+  inputLabel: { ...theme.typography.label, color: theme.colors.text, marginBottom: theme.spacing.xs, fontFamily: 'Poppins-Medium' },
+  input: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    ...theme.typography.body,
+    color: theme.colors.text,
   },
-  createButton: {
-    backgroundColor: '#4A90E2',
-    borderRadius: 8,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 12,
+  primaryButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: theme.colors.primary,
+    marginHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.full,
+    ...theme.shadow,
   },
-  createButtonDisabled: {
-    backgroundColor: '#BDBDBD',
-  },
-  createButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: 'Poppins-SemiBold',
-  },
-  skipButton: {
-    backgroundColor: 'transparent',
-    borderRadius: 8,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  skipButtonText: {
-    color: '#757575',
-    fontSize: 16,
-    fontWeight: '500',
-    fontFamily: 'Poppins-Medium',
-  },
+  primaryButtonText: { color: theme.colors.white, fontFamily: 'Poppins-SemiBold', fontSize: 16, marginRight: theme.spacing.sm },
 });
 
-export default BusinessCardScreen;
+export default BusinessCategoryScreen;

@@ -16,6 +16,7 @@ import {
   StatusBar,
   Animated,
   TextInput,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   FlatList,
@@ -171,10 +172,38 @@ const Home = ({ navigation }) => {
   ];
   
   const quickActions = [
-      { title: 'New Sale', icon: 'add-shopping-cart', action: () => {} },
-      { title: 'New Expense', icon: 'receipt', action: () => {} },
-      { title: 'Add Stock', icon: 'inventory', action: () => {} },
-      { title: 'New Report', icon: 'assessment', action: () => {} },
+      { 
+        title: 'New Sale', 
+        icon: 'add-shopping-cart', 
+        action: () => {
+          navigation.navigate('AddTransactionScreen', { type: 'Income' });
+        }
+      },
+      { 
+        title: 'New Expense', 
+        icon: 'receipt', 
+        action: () => {
+          navigation.navigate('AddTransactionScreen', { type: 'Expense' });
+        }
+      },
+      { 
+        title: 'Add Stock', 
+        icon: 'inventory', 
+        action: () => {
+          Alert.alert('Add Stock', 'Opening inventory management...', [
+            { text: 'OK', onPress: () => navigation.navigate('InventoryScreen') }
+          ]);
+        }
+      },
+      { 
+        title: 'New Report', 
+        icon: 'assessment', 
+        action: () => {
+          Alert.alert('New Report', 'Opening reports dashboard...', [
+            { text: 'OK', onPress: () => navigation.navigate('ReportsScreen') }
+          ]);
+        }
+      },
   ];
 
   const bottomNavItems = [
@@ -221,13 +250,44 @@ const Home = ({ navigation }) => {
       </View>
       <ScrollView>
         {sidebarItems.map((item) => (
-          <TouchableOpacity key={item.title} style={styles.sidebarItem}>
+          <TouchableOpacity 
+            key={item.title} 
+            style={styles.sidebarItem}
+            onPress={() => {
+              if (item.title === 'Inventory' || item.title === 'Ledger' || item.title === 'CRM' || item.title === 'Reports') {
+                navigation.navigate(`${item.title}Screen`);
+                setSidebarVisible(false);
+              }
+            }}
+          >
             <Icon name={item.icon} size={24} color={theme.colors.subtleText} />
             <Text style={styles.sidebarItemText}>{item.title}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
-      <TouchableOpacity style={[styles.sidebarItem, styles.sidebarLogout]}>
+      <TouchableOpacity 
+        style={[styles.sidebarItem, styles.sidebarLogout]}
+        onPress={() => {
+          Alert.alert(
+            'Logout',
+            'Are you sure you want to logout?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Logout', 
+                style: 'destructive',
+                onPress: () => {
+                  setSidebarVisible(false);
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Login' }],
+                  });
+                }
+              }
+            ]
+          );
+        }}
+      >
         <Icon name="logout" size={24} color={theme.colors.danger} />
         <Text style={[styles.sidebarItemText, { color: theme.colors.danger }]}>Logout</Text>
       </TouchableOpacity>
@@ -331,7 +391,12 @@ const Home = ({ navigation }) => {
             <Text style={theme.typography.h2}>Quick Actions</Text>
             <View style={styles.quickActionsRow}>
                 {quickActions.map(item => (
-                    <TouchableOpacity key={item.title} style={styles.quickAction}>
+                    <TouchableOpacity 
+                      key={item.title} 
+                      style={styles.quickAction}
+                      onPress={item.action}
+                      activeOpacity={0.7}
+                    >
                         <View style={styles.quickActionIconContainer}>
                             <Icon name={item.icon} size={28} color={theme.colors.primary} />
                         </View>
@@ -367,7 +432,16 @@ const Home = ({ navigation }) => {
       {/* BOTTOM NAVIGATION */}
       <View style={styles.bottomNav}>
         {bottomNavItems.map((item) => (
-          <TouchableOpacity key={item.name} style={styles.bottomNavItem} onPress={() => setSelectedTab(item.name)}>
+          <TouchableOpacity 
+            key={item.name} 
+            style={styles.bottomNavItem} 
+            onPress={() => {
+              setSelectedTab(item.name);
+              if (item.name !== 'Home') {
+                navigation.navigate(`${item.name}Screen`);
+              }
+            }}
+          >
             <Icon name={item.icon} size={28} color={selectedTab === item.name ? theme.colors.primary : theme.colors.subtleText} />
             <Text style={[styles.bottomNavText, selectedTab === item.name && styles.bottomNavTextActive]}>{item.name}</Text>
           </TouchableOpacity>

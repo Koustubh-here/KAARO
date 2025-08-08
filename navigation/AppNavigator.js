@@ -18,6 +18,8 @@ import InventoryScreen from '../screens/InventoryScreen.js';
 import LedgerScreen from '../screens/LedgerScreen.js';
 import CRMScreen from '../screens/CRMScreen.js';
 import ReportsScreen from '../screens/ReportsScreen.js';
+import AddTransactionScreen from '../screens/AddTransactionScreen.js';
+import ProductDetailsScreen from '../screens/ProductDetailsScreen.js';
 
 const Stack = createNativeStackNavigator();
 
@@ -118,6 +120,22 @@ const AppNavigator = () => {
         <Stack.Screen 
           name="ReportsScreen" 
           component={ReportsScreen}
+          options={{
+            gestureEnabled: true,
+          }}
+        />
+
+        <Stack.Screen 
+          name="AddTransactionScreen" 
+          component={AddTransactionScreen}
+          options={{
+            gestureEnabled: true,
+          }}
+        />
+
+        <Stack.Screen 
+          name="ProductDetailsScreen" 
+          component={ProductDetailsScreen}
           options={{
             gestureEnabled: true,
           }}

@@ -14,6 +14,7 @@ import {
   FlatList,
   StatusBar,
   Platform,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -109,8 +110,27 @@ const LedgerScreen = ({ navigation }) => {
       <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
       
       <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Icon name="arrow-back" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
         <Text style={theme.typography.h1}>Ledger</Text>
-        <TouchableOpacity style={styles.addButton} onPress={() => { /* Navigate to Add Transaction Screen */ }}>
+        <TouchableOpacity 
+          style={styles.addButton} 
+          onPress={() => {
+            Alert.alert(
+              'Add Transaction',
+              'Choose transaction type',
+              [
+                { text: 'Income', onPress: () => navigation.navigate('AddTransactionScreen', { type: 'Income' }) },
+                { text: 'Expense', onPress: () => navigation.navigate('AddTransactionScreen', { type: 'Expense' }) },
+                { text: 'Cancel', style: 'cancel' }
+              ]
+            );
+          }}
+        >
           <Icon name="add" size={32} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
@@ -176,6 +196,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: Platform.OS === 'android' ? theme.spacing.lg : theme.spacing.sm,
     paddingBottom: theme.spacing.sm,
+  },
+  backButton: {
+    padding: theme.spacing.sm,
+    marginLeft: -theme.spacing.sm,
   },
   addButton: {
     padding: theme.spacing.sm,

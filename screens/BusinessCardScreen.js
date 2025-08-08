@@ -33,10 +33,10 @@ const BusinessCardScreen = ({ navigation, route }) => {
         'Your digital business card has been created successfully.',
         [
           {
-            text: 'Continue',
+            text: 'Continue to App',
             onPress: () => {
-              // Navigate to next screen or main app
-              navigation.navigate('Dashboard'); // Adjust as needed
+              // Navigate to main app
+              navigation.navigate('Home');
             }
           }
         ]
@@ -57,7 +57,7 @@ const BusinessCardScreen = ({ navigation, route }) => {
           text: 'Skip',
           onPress: () => {
             // Navigate to main app
-            navigation.navigate('Dashboard'); // Adjust as needed
+            navigation.navigate('Home');
           }
         }
       ]

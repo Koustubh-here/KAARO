@@ -16,6 +16,7 @@ import {
   StatusBar,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -87,7 +88,19 @@ const ReportsScreen = ({ navigation }) => {
   const [generatedReport, setGeneratedReport] = useState(null);
 
   const handleGenerateReport = () => {
-    if (selectedReport) {
+    if (!selectedReport) {
+      Alert.alert('Error', 'Please select a report type first');
+      return;
+    }
+
+    // Show loading state simulation
+    Alert.alert(
+      'Generating Report',
+      'Please wait while we generate your report...',
+      [{ text: 'OK' }]
+    );
+
+    setTimeout(() => {
       // In a real app, you would fetch and process data here.
       // We'll use mock data based on the selected report key.
       const reportData = MOCK_REPORT_DATA[selectedReport] || {
@@ -97,7 +110,7 @@ const ReportsScreen = ({ navigation }) => {
           tableData: [['Data A', 'Data B']]
       };
       setGeneratedReport(reportData);
-    }
+    }, 1000);
   };
 
   const renderReportGenerator = () => (
@@ -177,7 +190,21 @@ const ReportsScreen = ({ navigation }) => {
             ))}
         </View>
 
-        <TouchableOpacity style={styles.primaryButton}>
+        <TouchableOpacity 
+          style={styles.primaryButton}
+          onPress={() => {
+            Alert.alert(
+              'Share Report',
+              'How would you like to share this report?',
+              [
+                { text: 'Download PDF', onPress: () => Alert.alert('Feature Coming Soon', 'PDF download will be available soon.') },
+                { text: 'Share via Email', onPress: () => Alert.alert('Feature Coming Soon', 'Email sharing will be available soon.') },
+                { text: 'Export to Excel', onPress: () => Alert.alert('Feature Coming Soon', 'Excel export will be available soon.') },
+                { text: 'Cancel', style: 'cancel' }
+              ]
+            );
+          }}
+        >
             <Text style={styles.primaryButtonText}>Download / Share</Text>
             <Icon name="share" size={20} color={theme.colors.white} />
         </TouchableOpacity>
@@ -189,7 +216,14 @@ const ReportsScreen = ({ navigation }) => {
       <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
       
       <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Icon name="arrow-back" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
         <Text style={theme.typography.h1}>Reports</Text>
+        <View style={styles.placeholder} />
       </View>
 
       <View style={{flex: 1}}>
@@ -205,9 +239,19 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: theme.spacing.lg,
     paddingTop: Platform.OS === 'android' ? theme.spacing.lg : theme.spacing.sm,
     paddingBottom: theme.spacing.md,
+  },
+  backButton: {
+    padding: theme.spacing.sm,
+    marginLeft: -theme.spacing.sm,
+  },
+  placeholder: {
+    width: 32,
   },
   section: {
     paddingHorizontal: theme.spacing.lg,

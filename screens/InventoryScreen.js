@@ -17,6 +17,7 @@ import {
   Image,
   StatusBar,
   Platform,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -95,7 +96,12 @@ const InventoryScreen = ({ navigation }) => {
   };
 
   const renderProductItem = ({ item }) => (
-    <TouchableOpacity style={styles.productItem}>
+    <TouchableOpacity 
+      style={styles.productItem}
+      onPress={() => {
+        navigation.navigate('ProductDetailsScreen', { product: item });
+      }}
+    >
       <Image source={{ uri: item.image }} style={styles.productImage} />
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.name}</Text>
@@ -112,8 +118,26 @@ const InventoryScreen = ({ navigation }) => {
       <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
       
       <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Icon name="arrow-back" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
         <Text style={theme.typography.h1}>Inventory</Text>
-        <TouchableOpacity style={styles.addButton} onPress={() => { /* Navigate to Add Product Screen */ }}>
+        <TouchableOpacity 
+          style={styles.addButton} 
+          onPress={() => {
+            Alert.alert(
+              'Add Product',
+              'Add a new product to your inventory',
+              [
+                { text: 'Add Product', onPress: () => Alert.alert('Feature Coming Soon', 'Add product feature will be available soon.') },
+                { text: 'Cancel', style: 'cancel' }
+              ]
+            );
+          }}
+        >
           <Icon name="add" size={32} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
@@ -182,6 +206,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: Platform.OS === 'android' ? theme.spacing.lg : theme.spacing.sm,
     paddingBottom: theme.spacing.sm,
+  },
+  backButton: {
+    padding: theme.spacing.sm,
+    marginLeft: -theme.spacing.sm,
   },
   addButton: {
     padding: theme.spacing.sm,
