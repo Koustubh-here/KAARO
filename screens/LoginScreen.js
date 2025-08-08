@@ -17,6 +17,7 @@ import {
   Platform,
 } from 'react-native';
 import { useI18n } from '../i18n/I18nProvider';
+import { supabase } from '../lib/supabaseClient';
 
 const LoginScreen = ({ navigation }) => {
   const { t } = useI18n();
@@ -36,24 +37,14 @@ const LoginScreen = ({ navigation }) => {
     }
 
     setIsLoading(true);
-    
-    // Simulate login API call
-    setTimeout(() => {
-      setIsLoading(false);
-      Alert.alert(
-        t('common.success'), 
-        t('auth.login.successLogin'),
-        [
-          {
-            text: t('auth.login.continue'),
-            onPress: () => {
-              // Navigate to BusinessCategory screen to set up business profile
-              navigation.navigate('BusinessCategoryScreen');
-            }
-          }
-        ]
-      );
-    }, 1500);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    setIsLoading(false);
+    if (error) {
+      Alert.alert(t('common.error'), error.message);
+      return;
+    }
+    // session is handled by AuthContext; navigate to Home or onboarding
+    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
   };
 
   const navigateToSignUp = () => {

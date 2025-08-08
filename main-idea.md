@@ -58,5 +58,3 @@ WHY?
 - 🔹 Share it instantly via QR code or link
 - 🔹 Embed appointment booking or catalog links
 
-
-i want cursor to build this full app

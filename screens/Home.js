@@ -4,7 +4,7 @@
  * overview of business performance. Designed for clarity and delight.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,9 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
+import { useAuth } from '../context/AuthContext';
+import { listTransactions, sumTransactions } from '../lib/db';
+import { useFocusEffect } from '@react-navigation/native';
 
 // THEME & DESIGN SYSTEM =================================================
 const theme = {
@@ -93,6 +96,7 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const Home = ({ navigation }) => {
   const { t } = useI18n();
+  const { signOut, business } = useAuth();
   const [selectedTab, setSelectedTab] = useState('Home');
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
@@ -156,13 +160,30 @@ const Home = ({ navigation }) => {
     }
   };
 
-  // MOCK DATA
-  const activityData = [
-    { type: 'alert', title: 'Low Stock: Classic T-Shirt', time: 'Just now', icon: 'warning', color: theme.colors.warning },
-    { type: 'sale', title: 'Sale to #CUST-0892', time: '15 mins ago', amount: '+ ₹4,999', icon: 'shopping-cart', color: theme.colors.success },
-    { type: 'message', title: 'New inquiry from R. Sharma', time: '1 hour ago', icon: 'chat-bubble', color: theme.colors.primary },
-    { type: 'expense', title: 'Marketing Subscription', time: '4 hours ago', amount: '- ₹1,500', icon: 'receipt-long', color: theme.colors.danger },
-  ];
+  const [activityData, setActivityData] = useState([]);
+  const [summary, setSummary] = useState({ income: 0, expenses: 0 });
+
+  const load = useCallback(async () => {
+    if (!business?.id) return;
+    const { data: tx } = await listTransactions(business.id);
+    const { data: sums } = await sumTransactions(business.id);
+    const recent = (tx || []).slice(0, 5).map(t => ({
+      type: (t.type || '').toLowerCase(),
+      title: t.description,
+      time: new Date(t.date || t.created_at).toDateString(),
+      amount: `${(t.type || '').toLowerCase() === 'income' ? '+ ' : '- '}₹${Number(t.amount || 0).toLocaleString('en-IN')}`,
+      icon: (t.type || '').toLowerCase() === 'income' ? 'trending-up' : 'trending-down',
+      color: (t.type || '').toLowerCase() === 'income' ? theme.colors.success : theme.colors.danger,
+    }));
+    setActivityData(recent);
+    setSummary({ income: sums?.income || 0, expenses: sums?.expenses || 0 });
+  }, [business?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const sidebarItems = [
     { title: t('home.sidebar.ledger'), route: 'Ledger', icon: 'account-balance-wallet' },
@@ -278,12 +299,9 @@ const Home = ({ navigation }) => {
               { 
                 text: t('home.sidebar.logout'), 
                 style: 'destructive',
-                onPress: () => {
+                onPress: async () => {
+                  await signOut();
                   setSidebarVisible(false);
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: 'Login' }],
-                  });
                 }
               }
             ]
@@ -373,7 +391,7 @@ const Home = ({ navigation }) => {
                 </View>
                 <Text style={styles.summaryGrowthPositive}>+15.2%</Text>
             </View>
-            <Text style={styles.summaryValue}>₹12,450</Text>
+            <Text style={styles.summaryValue}>₹{Number(summary.income).toLocaleString('en-IN')}</Text>
             <Text style={styles.summaryLabel}>{t('home.todaysSales')}</Text>
           </View>
           <View style={[styles.summaryCard, theme.shadow]}>
@@ -383,7 +401,7 @@ const Home = ({ navigation }) => {
                 </View>
                 <Text style={styles.summaryGrowthNegative}>-8.5%</Text>
             </View>
-            <Text style={styles.summaryValue}>₹3,200</Text>
+            <Text style={styles.summaryValue}>₹{Number(summary.expenses).toLocaleString('en-IN')}</Text>
             <Text style={styles.summaryLabel}>{t('home.todaysExpenses')}</Text>
           </View>
         </View>

@@ -4,7 +4,7 @@
  * Adheres to the KAARO design system for a cohesive app experience.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,9 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
+import { useAuth } from '../context/AuthContext';
+import { listTransactions, sumTransactions } from '../lib/db';
+import { useFocusEffect } from '@react-navigation/native';
 
 // THEME & DESIGN SYSTEM (Consistent with other screens)
 const theme = {
@@ -53,45 +56,45 @@ const theme = {
   },
 };
 
-// MOCK DATA
-const FILTERS = ['all', 'income', 'expenses'];
-
-const ALL_TRANSACTIONS = [
-  { id: '1', type: 'Income', description: 'Sale to Customer #1234', category: 'Product Sale', date: '2024-08-15', amount: 2500 },
-  { id: '2', type: 'Expenses', description: 'Office Supplies Purchase', category: 'Operating Cost', date: '2024-08-15', amount: 850 },
-  { id: '3', type: 'Income', description: 'Sale to R. Sharma', category: 'Product Sale', date: '2024-08-14', amount: 4999 },
-  { id: '4', type: 'Expenses', description: 'Marketing Subscription', category: 'Software', date: '2024-08-14', amount: 1500 },
-  { id: '5', type: 'Expenses', description: 'Rent Payment - August', category: 'Fixed Cost', date: '2024-08-13', amount: 15000 },
-  { id: '6', type: 'Income', description: 'Consulting Service', category: 'Services', date: '2024-08-12', amount: 7500 },
-  { id: '7', type: 'Expenses', description: 'Team Lunch', category: 'Employee Expense', date: '2024-08-12', amount: 2200 },
-];
+const FILTERS = ['all', 'income', 'expense'];
 
 const LedgerScreen = ({ navigation }) => {
   const { t } = useI18n();
+  const { business } = useAuth();
   const [activeFilter, setActiveFilter] = useState('all');
+  const [transactions, setTransactions] = useState([]);
+  const [totals, setTotals] = useState({ income: 0, expenses: 0 });
+  const [isLoading, setIsLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!business?.id) return;
+    setIsLoading(true);
+    const { data: tx, error } = await listTransactions(business.id);
+    const { data: sums } = await sumTransactions(business.id);
+    if (!error) setTransactions(tx || []);
+    setTotals({ income: sums?.income || 0, expenses: sums?.expenses || 0 });
+    setIsLoading(false);
+  }, [business?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const { filteredTransactions, totalIncome, totalExpenses } = useMemo(() => {
-    let transactions = ALL_TRANSACTIONS;
-    let income = 0;
-    let expenses = 0;
-
-    ALL_TRANSACTIONS.forEach(t => {
-      if (t.type === 'Income') income += t.amount;
-      else expenses += t.amount;
-    });
-
+    let tx = transactions;
     if (activeFilter !== 'all') {
-      transactions = transactions.filter(t => t.type.toLowerCase() === (activeFilter === 'expenses' ? 'expenses' : activeFilter));
+      tx = tx.filter(t => (t.type || '').toLowerCase() === activeFilter);
     }
-
-    return { filteredTransactions: transactions, totalIncome: income, totalExpenses: expenses };
-  }, [activeFilter]);
+    return { filteredTransactions: tx, totalIncome: totals.income, totalExpenses: totals.expenses };
+  }, [activeFilter, transactions, totals]);
 
   const renderTransactionItem = ({ item }) => {
-    const isIncome = item.type === 'Income';
+    const isIncome = (item.type || '').toLowerCase() === 'income';
     const amountColor = isIncome ? theme.colors.success : theme.colors.danger;
     const iconName = isIncome ? 'arrow-upward' : 'arrow-downward';
-    const formattedAmount = `${isIncome ? '+' : '-'} ₹${item.amount.toLocaleString('en-IN')}`;
+    const formattedAmount = `${isIncome ? '+' : '-'} ₹${Number(item.amount || 0).toLocaleString('en-IN')}`;
 
     return (
       <TouchableOpacity style={styles.transactionItem}>
@@ -126,8 +129,8 @@ const LedgerScreen = ({ navigation }) => {
               t('ledger.addTransactionTitle'),
               t('ledger.addTransactionBody'),
               [
-                { text: t('ledger.income'), onPress: () => navigation.navigate('AddTransactionScreen', { type: t('types.income') }) },
-                { text: t('ledger.expense'), onPress: () => navigation.navigate('AddTransactionScreen', { type: t('types.expense') }) },
+                 { text: t('ledger.income'), onPress: () => navigation.navigate('AddTransactionScreen', { type: 'Income' }) },
+                 { text: t('ledger.expense'), onPress: () => navigation.navigate('AddTransactionScreen', { type: 'Expense' }) },
                 { text: t('ledger.cancel'), style: 'cancel' }
               ]
             );
@@ -140,11 +143,11 @@ const LedgerScreen = ({ navigation }) => {
       <View style={styles.summaryRow}>
         <View style={[styles.summaryCard, theme.shadow, { marginRight: theme.spacing.md }]}>
           <Text style={styles.summaryLabel}>{t('ledger.totalIncome')}</Text>
-          <Text style={styles.summaryValueIncome}>₹{totalIncome.toLocaleString('en-IN')}</Text>
+          <Text style={styles.summaryValueIncome}>₹{Number(totalIncome).toLocaleString('en-IN')}</Text>
         </View>
         <View style={[styles.summaryCard, theme.shadow]}>
           <Text style={styles.summaryLabel}>{t('ledger.totalExpenses')}</Text>
-          <Text style={styles.summaryValueExpense}>₹{totalExpenses.toLocaleString('en-IN')}</Text>
+          <Text style={styles.summaryValueExpense}>₹{Number(totalExpenses).toLocaleString('en-IN')}</Text>
         </View>
       </View>
 
@@ -168,7 +171,7 @@ const LedgerScreen = ({ navigation }) => {
       <View style={styles.transactionListContainer}>
         <Text style={styles.sectionTitle}>{t('ledger.recentTransactions')}</Text>
         <FlatList
-          data={filteredTransactions}
+           data={filteredTransactions}
           renderItem={renderTransactionItem}
           keyExtractor={item => item.id}
           contentContainerStyle={{ paddingBottom: theme.spacing.xl }}
@@ -176,8 +179,8 @@ const LedgerScreen = ({ navigation }) => {
           ListEmptyComponent={
             <View style={styles.emptyStateContainer}>
                 <Icon name="receipt-long" size={64} color={theme.colors.border} />
-                <Text style={styles.emptyStateText}>{t('ledger.noTransactions')}</Text>
-                <Text style={styles.emptyStateSubtext}>{t('ledger.addNewToStart')}</Text>
+                <Text style={styles.emptyStateText}>{isLoading ? t('common.loading') : t('ledger.noTransactions')}</Text>
+                {!isLoading && <Text style={styles.emptyStateSubtext}>{t('ledger.addNewToStart')}</Text>}
             </View>
           }
         />

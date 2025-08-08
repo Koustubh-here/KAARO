@@ -17,6 +17,7 @@ import {
   Platform,
 } from 'react-native';
 import { useI18n } from '../i18n/I18nProvider';
+import { supabase } from '../lib/supabaseClient';
 
 const SignUpScreen = ({ navigation }) => {
   const { t } = useI18n();
@@ -74,21 +75,29 @@ const SignUpScreen = ({ navigation }) => {
     }
 
     setIsLoading(true);
-
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      Alert.alert(
-        t('auth.signup.successTitle'),
-        t('auth.signup.successBody'),
-        [
-          {
-            text: t('auth.signup.ok'),
-            onPress: () => navigation.navigate('Login'),
-          },
-        ]
-      );
-    }, 1500);
+    const { data, error } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.password,
+      options: {
+        data: { full_name: formData.fullName },
+        emailRedirectTo: 'https://example.com/welcome' // placeholder, adjust for magic link if using
+      }
+    });
+    setIsLoading(false);
+    if (error) {
+      Alert.alert(t('common.error'), error.message);
+      return;
+    }
+    Alert.alert(
+      t('auth.signup.successTitle'),
+      t('auth.signup.successBody'),
+      [
+        {
+          text: t('auth.signup.ok'),
+          onPress: () => navigation.navigate('Login'),
+        },
+      ]
+    );
   };
 
   const navigateToLogin = () => {

@@ -4,7 +4,7 @@
  * Built with the KAARO design system for a consistent and premium user experience.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,9 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
+import { useAuth } from '../context/AuthContext';
+import { listProducts } from '../lib/db';
+import { useFocusEffect } from '@react-navigation/native';
 
 // THEME & DESIGN SYSTEM (Consistent with Home.js)
 const theme = {
@@ -56,40 +59,43 @@ const theme = {
   },
 };
 
-// MOCK DATA
-const CATEGORIES_KEYS = ['all', 'food', 'beverages', 'snacks', 'dairy'];
-
-const ALL_PRODUCTS = [
-  { id: '1', name: 'Organic Apples', category: 'Food', stock: 100, image: 'https://images.pexels.com/photos/102104/pexels-photo-102104.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
-  { id: '2', name: 'Almond Milk', category: 'Dairy', stock: 50, image: 'https://images.pexels.com/photos/236781/pexels-photo-236781.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
-  { id: '3', name: 'Potato Chips', category: 'Snacks', stock: 200, image: 'https://images.pexels.com/photos/3764353/pexels-photo-3764353.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
-  { id: '4', name: 'Greek Yogurt', category: 'Dairy', stock: 75, image: 'https://images.pexels.com/photos/5969562/pexels-photo-5969562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
-  { id: '5', name: 'Cold Brew Coffee', category: 'Beverages', stock: 15, image: 'https://images.pexels.com/photos/851555/pexels-photo-851555.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
-  { id: '6', name: 'Whole Wheat Bread', category: 'Food', stock: 40, image: 'https://images.pexels.com/photos/1775043/pexels-photo-1775043.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
-  { id: '7', name: 'Dark Chocolate Bar', category: 'Snacks', stock: 120, image: 'https://images.pexels.com/photos/4113840/pexels-photo-4113840.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
-  { id: '8', name: 'Sparkling Water', category: 'Beverages', stock: 8, image: 'https://images.pexels.com/photos/416528/pexels-photo-416528.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
-];
+const CATEGORIES_KEYS = ['all'];
 
 const InventoryScreen = ({ navigation }) => {
   const { t } = useI18n();
+  const { business } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [products, setProducts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!business?.id) return;
+    setIsLoading(true);
+    const { data, error } = await listProducts(business.id);
+    if (!error) setProducts(data || []);
+    setIsLoading(false);
+  }, [business?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   // Memoized filtering for performance
   const filteredProducts = useMemo(() => {
-    let products = ALL_PRODUCTS;
+    let result = products;
 
-    if (selectedCategory !== 'all') {
-      products = products.filter(p => p.category.toLowerCase() === selectedCategory);
-    }
+    // If categories are later added in DB, filter here
 
     if (searchQuery) {
       const lowercasedQuery = searchQuery.toLowerCase();
-      products = products.filter(p => p.name.toLowerCase().includes(lowercasedQuery));
+      result = result.filter(p => (p.name || '').toLowerCase().includes(lowercasedQuery));
     }
 
-    return products;
-  }, [searchQuery, selectedCategory]);
+    return result;
+  }, [searchQuery, selectedCategory, products]);
 
   const getStockStyle = (stock) => {
     if (stock < 20) return { color: theme.colors.danger };
@@ -104,11 +110,11 @@ const InventoryScreen = ({ navigation }) => {
         navigation.navigate('ProductDetailsScreen', { product: item });
       }}
     >
-      <Image source={{ uri: item.image }} style={styles.productImage} />
+      <Image source={{ uri: item.image || 'https://via.placeholder.com/56' }} style={styles.productImage} />
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.name}</Text>
-        <Text style={[styles.productStock, getStockStyle(item.stock)]}>
-          {item.stock} in stock
+        <Text style={[styles.productStock, getStockStyle(item.quantity ?? item.stock ?? 0)]}>
+          {item.quantity ?? item.stock ?? 0} in stock
         </Text>
       </View>
       <Icon name="chevron-right" size={24} color={theme.colors.subtleText} />
@@ -129,16 +135,7 @@ const InventoryScreen = ({ navigation }) => {
         <Text style={theme.typography.h1}>{t('inventory.title')}</Text>
         <TouchableOpacity 
           style={styles.addButton} 
-          onPress={() => {
-            Alert.alert(
-              t('inventory.addProductTitle'),
-              t('inventory.addProductBody'),
-              [
-                { text: t('inventory.addProduct'), onPress: () => Alert.alert(t('productDetails.featureComingSoon'), '') },
-                { text: t('inventory.cancel'), style: 'cancel' }
-              ]
-            );
-          }}
+          onPress={() => navigation.navigate('AddProductScreen')}
         >
           <Icon name="add" size={32} color={theme.colors.primary} />
         </TouchableOpacity>
@@ -186,8 +183,10 @@ const InventoryScreen = ({ navigation }) => {
           ListEmptyComponent={
             <View style={styles.emptyStateContainer}>
                 <Icon name="search-off" size={64} color={theme.colors.border} />
-                <Text style={styles.emptyStateText}>{t('inventory.noProducts')}</Text>
-                <Text style={styles.emptyStateSubtext}>{t('inventory.tryAdjusting')}</Text>
+                <Text style={styles.emptyStateText}>{isLoading ? t('common.loading') : t('inventory.noProducts')}</Text>
+                {!isLoading && (
+                  <Text style={styles.emptyStateSubtext}>{t('inventory.tryAdjusting')}</Text>
+                )}
             </View>
           }
         />

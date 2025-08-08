@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
+import { updateProduct } from '../lib/db';
 
 const theme = {
   colors: {
@@ -67,7 +68,7 @@ const ProductDetailsScreen = ({ navigation, route }) => {
   };
 
   const [editingStock, setEditingStock] = useState(false);
-  const [newStock, setNewStock] = useState(product.stock.toString());
+  const [newStock, setNewStock] = useState(String(product.quantity ?? product.stock ?? 0));
 
   const getStockStatusColor = (stock) => {
     if (stock < 20) return theme.colors.danger;
@@ -75,7 +76,7 @@ const ProductDetailsScreen = ({ navigation, route }) => {
     return theme.colors.success;
   };
 
-  const handleUpdateStock = () => {
+  const handleUpdateStock = async () => {
     const updatedStock = parseInt(newStock);
     if (isNaN(updatedStock) || updatedStock < 0) {
       Alert.alert(t('productDetails.errorTitle'), t('productDetails.errorBody'));
@@ -84,16 +85,19 @@ const ProductDetailsScreen = ({ navigation, route }) => {
 
     Alert.alert(
       t('productDetails.updateStockTitle'),
-      t('productDetails.updateStockBody', { from: product.stock, to: updatedStock }),
+      t('productDetails.updateStockBody', { from: product.quantity ?? product.stock ?? 0, to: updatedStock }),
       [
         { text: t('productDetails.cancel'), style: 'cancel' },
         {
           text: t('productDetails.update'),
-          onPress: () => {
-            // In real app, this would update the stock via API
+          onPress: async () => {
+            const { error } = await updateProduct(product.id, { stock: updatedStock });
+            if (error) {
+              Alert.alert(t('productDetails.errorTitle'), error.message);
+              return;
+            }
             Alert.alert(t('productDetails.successTitle'), t('productDetails.successBody'));
             setEditingStock(false);
-            product.stock = updatedStock; // Update locally for demo
           },
         },
       ]
@@ -116,13 +120,13 @@ const ProductDetailsScreen = ({ navigation, route }) => {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Product Image and Basic Info */}
         <View style={styles.productCard}>
-          <Image source={{ uri: product.image }} style={styles.productImage} />
+          <Image source={{ uri: product.image || 'https://via.placeholder.com/300x200' }} style={styles.productImage} />
           <View style={styles.productInfo}>
             <Text style={styles.productName}>{product.name}</Text>
             <Text style={styles.productCategory}>{product.category}</Text>
             <View style={styles.stockContainer}>
-              <Text style={[styles.stockText, { color: getStockStatusColor(product.stock) }]}>
-                {t('productDetails.inStock', { count: product.stock })}
+              <Text style={[styles.stockText, { color: getStockStatusColor(product.quantity ?? product.stock ?? 0) }]}> 
+                {t('productDetails.inStock', { count: product.quantity ?? product.stock ?? 0 })}
               </Text>
               <TouchableOpacity
                 style={styles.editStockButton}
@@ -153,7 +157,7 @@ const ProductDetailsScreen = ({ navigation, route }) => {
                 style={styles.cancelButton}
                 onPress={() => {
                   setEditingStock(false);
-                  setNewStock(product.stock.toString());
+                   setNewStock(String(product.quantity ?? product.stock ?? 0));
                 }}
               >
                 <Text style={styles.cancelButtonText}>{t('productDetails.cancel')}</Text>

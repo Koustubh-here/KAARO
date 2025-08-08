@@ -18,6 +18,8 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
+import { useAuth } from '../context/AuthContext';
+import { createTransaction } from '../lib/db';
 
 const theme = {
   colors: {
@@ -47,7 +49,8 @@ const theme = {
 
 const AddTransactionScreen = ({ navigation, route }) => {
   const { t } = useI18n();
-  const { type } = route.params || { type: t('types.income') }; // 'Income' or 'Expense'
+  const { business } = useAuth();
+  const { type } = route.params || { type: 'Income' }; // 'Income' or 'Expense'
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
@@ -60,7 +63,7 @@ const AddTransactionScreen = ({ navigation, route }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSaveTransaction = () => {
+  const handleSaveTransaction = async () => {
     if (!formData.description.trim() || !formData.amount.trim()) {
       Alert.alert(t('common.error'), t('addTransaction.errors.fillAll'));
       return;
@@ -71,25 +74,38 @@ const AddTransactionScreen = ({ navigation, route }) => {
       return;
     }
 
-    setIsLoading(true);
+    if (!business?.id) {
+      Alert.alert(t('common.error'), t('common.tryAgain'));
+      return;
+    }
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      Alert.alert(
-        t('addTransaction.successTitle'),
-        t('addTransaction.successBody', { type }),
-        [
-          {
-            text: t('common.ok'),
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
-    }, 1500);
+    setIsLoading(true);
+    const payload = {
+      description: formData.description,
+      amount: Number(formData.amount),
+      category: formData.category || null,
+      date: formData.date,
+      type: (type || '').toLowerCase() === 'expense' ? 'expense' : 'income',
+    };
+    const { error } = await createTransaction(business.id, payload);
+    setIsLoading(false);
+    if (error) {
+      Alert.alert(t('common.error'), error.message);
+      return;
+    }
+    Alert.alert(
+      t('addTransaction.successTitle'),
+      t('addTransaction.successBody', { type }),
+      [
+        {
+          text: t('common.ok'),
+          onPress: () => navigation.goBack(),
+        },
+      ]
+    );
   };
 
-  const isExpense = type.toLowerCase() === t('types.expense').toLowerCase() || type === 'Expense';
+  const isExpense = (type || '').toLowerCase() === 'expense';
   const color = isExpense ? theme.colors.danger : theme.colors.success;
 
   return (
