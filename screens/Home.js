@@ -22,6 +22,7 @@ import {
   FlatList,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useI18n } from '../i18n/I18nProvider';
 
 // THEME & DESIGN SYSTEM =================================================
 const theme = {
@@ -91,12 +92,13 @@ const theme = {
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const Home = ({ navigation }) => {
+  const { t } = useI18n();
   const [selectedTab, setSelectedTab] = useState('Home');
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [chatMessages, setChatMessages] = useState([
-    { id: 1, text: "Hello! I'm KAARO.ai. How can I streamline your business tasks today?", isBot: true },
+    { id: 1, text: t('home.chat.welcome'), isBot: true },
   ]);
 
   const sidebarAnimation = useRef(new Animated.Value(-350)).current;
@@ -138,15 +140,15 @@ const Home = ({ navigation }) => {
   const sendMessage = () => {
     if (chatMessage.trim()) {
       const newMessage = { id: Date.now(), text: chatMessage, isBot: false };
-      const thinkingMessage = { id: Date.now() + 1, text: 'Typing...', isBot: true };
+      const thinkingMessage = { id: Date.now() + 1, text: t('home.chat.typing'), isBot: true };
 
       setChatMessages(prev => [...prev, newMessage, thinkingMessage]);
       setChatMessage('');
 
       setTimeout(() => {
-        const botResponse = {
+         const botResponse = {
           id: Date.now() + 2,
-          text: "Excellent question. I'm analyzing your real-time data to give you the best possible insights.",
+           text: "Excellent question. I'm analyzing your real-time data to give you the best possible insights.",
           isBot: true,
         };
         setChatMessages(prev => [...prev.slice(0, -1), botResponse]);
@@ -163,55 +165,55 @@ const Home = ({ navigation }) => {
   ];
 
   const sidebarItems = [
-    { title: 'Ledger', icon: 'account-balance-wallet' },
-    { title: 'Inventory', icon: 'inventory' },
-    { title: 'CRM', icon: 'people' },
-    { title: 'Reports', icon: 'assessment' },
-    { title: 'AI Settings', icon: 'smart-toy' },
-    { title: 'Settings', icon: 'settings' },
+    { title: t('home.sidebar.ledger'), route: 'Ledger', icon: 'account-balance-wallet' },
+    { title: t('home.sidebar.inventory'), route: 'Inventory', icon: 'inventory' },
+    { title: t('home.sidebar.crm'), route: 'CRM', icon: 'people' },
+    { title: t('home.sidebar.reports'), route: 'Reports', icon: 'assessment' },
+    { title: t('home.sidebar.aiSettings'), route: null, icon: 'smart-toy' },
+    { title: t('home.sidebar.settings'), route: null, icon: 'settings' },
   ];
   
   const quickActions = [
       { 
-        title: 'New Sale', 
+        title: t('home.newSale'), 
         icon: 'add-shopping-cart', 
         action: () => {
-          navigation.navigate('AddTransactionScreen', { type: 'Income' });
+          navigation.navigate('AddTransactionScreen', { type: t('types.income') });
         }
       },
       { 
-        title: 'New Expense', 
+        title: t('home.newExpense'), 
         icon: 'receipt', 
         action: () => {
-          navigation.navigate('AddTransactionScreen', { type: 'Expense' });
+          navigation.navigate('AddTransactionScreen', { type: t('types.expense') });
         }
       },
       { 
-        title: 'Add Stock', 
+        title: t('home.addStock'), 
         icon: 'inventory', 
         action: () => {
-          Alert.alert('Add Stock', 'Opening inventory management...', [
-            { text: 'OK', onPress: () => navigation.navigate('InventoryScreen') }
+          Alert.alert(t('home.alertAddStockTitle'), t('home.alertAddStockBody'), [
+            { text: t('common.ok'), onPress: () => navigation.navigate('InventoryScreen') }
           ]);
         }
       },
       { 
-        title: 'New Report', 
+        title: t('home.newReport'), 
         icon: 'assessment', 
         action: () => {
-          Alert.alert('New Report', 'Opening reports dashboard...', [
-            { text: 'OK', onPress: () => navigation.navigate('ReportsScreen') }
+          Alert.alert(t('home.alertNewReportTitle'), t('home.alertNewReportBody'), [
+            { text: t('common.ok'), onPress: () => navigation.navigate('ReportsScreen') }
           ]);
         }
       },
   ];
 
   const bottomNavItems = [
-    { name: 'Home', icon: 'home' },
-    { name: 'Inventory', icon: 'inventory' },
-    { name: 'Ledger', icon: 'account-balance-wallet' },
-    { name: 'CRM', icon: 'people' },
-    { name: 'Reports', icon: 'assessment' },
+    { route: 'Home', label: t('home.bottomNav.home'), icon: 'home' },
+    { route: 'Inventory', label: t('home.bottomNav.inventory'), icon: 'inventory' },
+    { route: 'Ledger', label: t('home.bottomNav.ledger'), icon: 'account-balance-wallet' },
+    { route: 'CRM', label: t('home.bottomNav.crm'), icon: 'people' },
+    { route: 'Reports', label: t('home.bottomNav.reports'), icon: 'assessment' },
   ];
 
   // REUSABLE & REFINED RENDER COMPONENTS
@@ -254,8 +256,8 @@ const Home = ({ navigation }) => {
             key={item.title} 
             style={styles.sidebarItem}
             onPress={() => {
-              if (item.title === 'Inventory' || item.title === 'Ledger' || item.title === 'CRM' || item.title === 'Reports') {
-                navigation.navigate(`${item.title}Screen`);
+              if (item.route) {
+                navigation.navigate(`${item.route}Screen`);
                 setSidebarVisible(false);
               }
             }}
@@ -269,12 +271,12 @@ const Home = ({ navigation }) => {
         style={[styles.sidebarItem, styles.sidebarLogout]}
         onPress={() => {
           Alert.alert(
-            'Logout',
-            'Are you sure you want to logout?',
+            t('home.sidebar.logoutTitle'),
+            t('home.sidebar.logoutBody'),
             [
-              { text: 'Cancel', style: 'cancel' },
+              { text: t('common.cancel'), style: 'cancel' },
               { 
-                text: 'Logout', 
+                text: t('home.sidebar.logout'), 
                 style: 'destructive',
                 onPress: () => {
                   setSidebarVisible(false);
@@ -289,7 +291,7 @@ const Home = ({ navigation }) => {
         }}
       >
         <Icon name="logout" size={24} color={theme.colors.danger} />
-        <Text style={[styles.sidebarItemText, { color: theme.colors.danger }]}>Logout</Text>
+        <Text style={[styles.sidebarItemText, { color: theme.colors.danger }]}>{t('home.sidebar.logout')}</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -301,8 +303,8 @@ const Home = ({ navigation }) => {
                 <View style={{flexDirection: 'row', alignItems: 'center'}}>
                     <View style={styles.chatBotAvatar}><Icon name="smart-toy" size={24} color={theme.colors.white} /></View>
                     <View>
-                        <Text style={styles.chatHeaderTitle}>KAARO.ai</Text>
-                        <Text style={styles.chatHeaderSubtitle}>Online</Text>
+                        <Text style={styles.chatHeaderTitle}>{t('home.chat.botName')}</Text>
+                        <Text style={styles.chatHeaderSubtitle}>{t('home.chat.online')}</Text>
                     </View>
                 </View>
                 <TouchableOpacity onPress={toggleChat}><Icon name="keyboard-arrow-down" size={32} color={theme.colors.white} /></TouchableOpacity>
@@ -321,7 +323,7 @@ const Home = ({ navigation }) => {
             <View style={styles.chatInputContainer}>
                 <TextInput
                     style={styles.chatInput}
-                    placeholder="Ask KAARO.ai anything..."
+                    placeholder={t('home.chat.inputPlaceholder')}
                     placeholderTextColor={theme.colors.subtleText}
                     value={chatMessage}
                     onChangeText={setChatMessage}
@@ -347,7 +349,7 @@ const Home = ({ navigation }) => {
         <TouchableOpacity onPress={toggleSidebar} style={styles.headerButton}>
           <Icon name="menu" size={28} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>KAARO</Text>
+        <Text style={styles.headerTitle}>{t('home.headerTitle')}</Text>
         <TouchableOpacity style={styles.headerButton}>
           <Icon name="notifications" size={28} color={theme.colors.text} />
           <View style={styles.notificationBadge}>
@@ -358,8 +360,8 @@ const Home = ({ navigation }) => {
 
       <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
-          <Text style={theme.typography.h1}>Good Morning, John!</Text>
-          <Text style={theme.typography.body}>Here's your business at a glance.</Text>
+          <Text style={theme.typography.h1}>{t('home.greeting')}</Text>
+          <Text style={theme.typography.body}>{t('home.overview')}</Text>
         </View>
 
         {/* SUMMARY CARDS */}
@@ -372,7 +374,7 @@ const Home = ({ navigation }) => {
                 <Text style={styles.summaryGrowthPositive}>+15.2%</Text>
             </View>
             <Text style={styles.summaryValue}>₹12,450</Text>
-            <Text style={styles.summaryLabel}>Today's Sales</Text>
+            <Text style={styles.summaryLabel}>{t('home.todaysSales')}</Text>
           </View>
           <View style={[styles.summaryCard, theme.shadow]}>
              <View style={styles.summaryHeader}>
@@ -382,13 +384,13 @@ const Home = ({ navigation }) => {
                 <Text style={styles.summaryGrowthNegative}>-8.5%</Text>
             </View>
             <Text style={styles.summaryValue}>₹3,200</Text>
-            <Text style={styles.summaryLabel}>Today's Expenses</Text>
+            <Text style={styles.summaryLabel}>{t('home.todaysExpenses')}</Text>
           </View>
         </View>
 
         {/* QUICK ACTIONS */}
         <View style={styles.section}>
-            <Text style={theme.typography.h2}>Quick Actions</Text>
+            <Text style={theme.typography.h2}>{t('home.quickActions')}</Text>
             <View style={styles.quickActionsRow}>
                 {quickActions.map(item => (
                     <TouchableOpacity 
@@ -408,7 +410,7 @@ const Home = ({ navigation }) => {
         
         {/* ACTIVITY FEED */}
         <View style={styles.section}>
-          <Text style={theme.typography.h2}>Activity Feed</Text>
+          <Text style={theme.typography.h2}>{t('home.activityFeed')}</Text>
           <View style={[styles.card, { paddingVertical: theme.spacing.sm }]}>
             <FlatList
               data={activityData}
@@ -433,17 +435,17 @@ const Home = ({ navigation }) => {
       <View style={styles.bottomNav}>
         {bottomNavItems.map((item) => (
           <TouchableOpacity 
-            key={item.name} 
+            key={item.route} 
             style={styles.bottomNavItem} 
             onPress={() => {
-              setSelectedTab(item.name);
-              if (item.name !== 'Home') {
-                navigation.navigate(`${item.name}Screen`);
+              setSelectedTab(item.route);
+              if (item.route !== 'Home') {
+                navigation.navigate(`${item.route}Screen`);
               }
             }}
           >
-            <Icon name={item.icon} size={28} color={selectedTab === item.name ? theme.colors.primary : theme.colors.subtleText} />
-            <Text style={[styles.bottomNavText, selectedTab === item.name && styles.bottomNavTextActive]}>{item.name}</Text>
+            <Icon name={item.icon} size={28} color={selectedTab === item.route ? theme.colors.primary : theme.colors.subtleText} />
+            <Text style={[styles.bottomNavText, selectedTab === item.route && styles.bottomNavTextActive]}>{item.label}</Text>
           </TouchableOpacity>
         ))}
       </View>

@@ -19,6 +19,7 @@ import {
   Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useI18n } from '../i18n/I18nProvider';
 
 // THEME & DESIGN SYSTEM (Consistent with other screens)
 const theme = {
@@ -56,13 +57,13 @@ const theme = {
 
 // MOCK DATA & CONFIG
 const REPORT_TYPES = [
-  { key: 'sales', name: 'Sales Report', icon: 'trending-up' },
-  { key: 'expense', name: 'Expense Report', icon: 'trending-down' },
-  { key: 'pnl', name: 'Profit & Loss', icon: 'account-balance' },
-  { key: 'stock', name: 'Stock Movement', icon: 'inventory' },
+  { key: 'sales', icon: 'trending-up' },
+  { key: 'expense', icon: 'trending-down' },
+  { key: 'pnl', icon: 'account-balance' },
+  { key: 'stock', icon: 'inventory' },
 ];
 
-const DATE_RANGES = ['Today', 'This Week', 'This Month', 'Custom'];
+const DATE_RANGES = ['today', 'thisWeek', 'thisMonth', 'custom'];
 
 const MOCK_REPORT_DATA = {
     sales: {
@@ -83,28 +84,29 @@ const MOCK_REPORT_DATA = {
 };
 
 const ReportsScreen = ({ navigation }) => {
+  const { t } = useI18n();
   const [selectedReport, setSelectedReport] = useState(null);
-  const [selectedDateRange, setSelectedDateRange] = useState('This Month');
+  const [selectedDateRange, setSelectedDateRange] = useState('thisMonth');
   const [generatedReport, setGeneratedReport] = useState(null);
 
   const handleGenerateReport = () => {
     if (!selectedReport) {
-      Alert.alert('Error', 'Please select a report type first');
+      Alert.alert(t('common.error'), t('reports.selectType'));
       return;
     }
 
     // Show loading state simulation
     Alert.alert(
-      'Generating Report',
-      'Please wait while we generate your report...',
-      [{ text: 'OK' }]
+      t('reports.generatingTitle'),
+      t('reports.generatingBody'),
+      [{ text: t('reports.ok') }]
     );
 
     setTimeout(() => {
       // In a real app, you would fetch and process data here.
       // We'll use mock data based on the selected report key.
       const reportData = MOCK_REPORT_DATA[selectedReport] || {
-          title: `${REPORT_TYPES.find(r => r.key === selectedReport)?.name} (${selectedDateRange})`,
+          title: `${t(`reports.types.${selectedReport}`)} (${t(`reports.dateRanges.${selectedDateRange}`)})`,
           metrics: [{label: 'Total', value: '₹XX,XXX'}],
           tableHeaders: ['Column 1', 'Column 2'],
           tableData: [['Data A', 'Data B']]
@@ -116,7 +118,7 @@ const ReportsScreen = ({ navigation }) => {
   const renderReportGenerator = () => (
     <View>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>1. Select Report Type</Text>
+        <Text style={styles.sectionTitle}>{t('reports.selectType')}</Text>
         <View style={styles.reportTypeGrid}>
           {REPORT_TYPES.map(report => (
             <TouchableOpacity
@@ -125,18 +127,18 @@ const ReportsScreen = ({ navigation }) => {
               onPress={() => setSelectedReport(report.key)}
             >
               <Icon name={report.icon} size={28} color={selectedReport === report.key ? theme.colors.primary : theme.colors.subtleText} />
-              <Text style={[styles.reportTypeName, selectedReport === report.key && styles.reportTypeNameActive]}>{report.name}</Text>
+              <Text style={[styles.reportTypeName, selectedReport === report.key && styles.reportTypeNameActive]}>{t(`reports.types.${report.key}`)}</Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>2. Choose Date Range</Text>
+        <Text style={styles.sectionTitle}>{t('reports.chooseDate')}</Text>
         <View style={styles.dateRangeContainer}>
             {DATE_RANGES.map(range => (
                 <TouchableOpacity key={range} style={[styles.dateRangeButton, selectedDateRange === range && styles.dateRangeButtonActive]} onPress={() => setSelectedDateRange(range)}>
-                    <Text style={[styles.dateRangeText, selectedDateRange === range && styles.dateRangeTextActive]}>{range}</Text>
+                    <Text style={[styles.dateRangeText, selectedDateRange === range && styles.dateRangeTextActive]}>{t(`reports.dateRanges.${range}`)}</Text>
                 </TouchableOpacity>
             ))}
         </View>
@@ -147,7 +149,7 @@ const ReportsScreen = ({ navigation }) => {
         onPress={handleGenerateReport}
         disabled={!selectedReport}
       >
-        <Text style={styles.primaryButtonText}>Generate Report</Text>
+        <Text style={styles.primaryButtonText}>{t('reports.generate')}</Text>
         <Icon name="assessment" size={24} color={theme.colors.white} />
       </TouchableOpacity>
     </View>
@@ -158,14 +160,14 @@ const ReportsScreen = ({ navigation }) => {
         <View style={styles.reportHeader}>
             <Text style={styles.reportTitle}>{generatedReport.title}</Text>
             <TouchableOpacity onPress={() => setGeneratedReport(null)}>
-                <Text style={styles.newReportLink}>Generate New Report</Text>
+                <Text style={styles.newReportLink}>{t('reports.generateNew')}</Text>
             </TouchableOpacity>
         </View>
 
         {/* Chart Placeholder */}
         <View style={styles.chartPlaceholder}>
             <Icon name="bar-chart" size={64} color={`${theme.colors.primary}50`} />
-            <Text style={styles.chartPlaceholderText}>Visual Chart Appears Here</Text>
+            <Text style={styles.chartPlaceholderText}>{t('reports.chartPlaceholder')}</Text>
         </View>
 
         {/* Key Metrics */}
@@ -194,18 +196,18 @@ const ReportsScreen = ({ navigation }) => {
           style={styles.primaryButton}
           onPress={() => {
             Alert.alert(
-              'Share Report',
-              'How would you like to share this report?',
+              t('reports.shareTitle'),
+              t('reports.shareBody'),
               [
-                { text: 'Download PDF', onPress: () => Alert.alert('Feature Coming Soon', 'PDF download will be available soon.') },
-                { text: 'Share via Email', onPress: () => Alert.alert('Feature Coming Soon', 'Email sharing will be available soon.') },
-                { text: 'Export to Excel', onPress: () => Alert.alert('Feature Coming Soon', 'Excel export will be available soon.') },
-                { text: 'Cancel', style: 'cancel' }
+                { text: t('reports.options.downloadPdf'), onPress: () => Alert.alert('Feature Coming Soon', '') },
+                { text: t('reports.options.shareEmail'), onPress: () => Alert.alert('Feature Coming Soon', '') },
+                { text: t('reports.options.exportExcel'), onPress: () => Alert.alert('Feature Coming Soon', '') },
+                { text: t('reports.options.cancel'), style: 'cancel' }
               ]
             );
           }}
         >
-            <Text style={styles.primaryButtonText}>Download / Share</Text>
+            <Text style={styles.primaryButtonText}>{t('reports.share')}</Text>
             <Icon name="share" size={20} color={theme.colors.white} />
         </TouchableOpacity>
     </ScrollView>

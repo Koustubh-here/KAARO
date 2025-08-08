@@ -16,8 +16,10 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useI18n } from '../i18n/I18nProvider';
 
 const SignUpScreen = ({ navigation }) => {
+  const { t } = useI18n();
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -34,32 +36,32 @@ const SignUpScreen = ({ navigation }) => {
     const { fullName, email, password, confirmPassword } = formData;
 
     if (!fullName.trim()) {
-      Alert.alert('Error', 'Please enter your full name');
+      Alert.alert(t('common.error'), t('auth.signup.errors.fullName'));
       return false;
     }
 
     if (!email.trim()) {
-      Alert.alert('Error', 'Please enter your email address');
+      Alert.alert(t('common.error'), t('auth.signup.errors.email'));
       return false;
     }
 
     if (!email.includes('@') || !email.includes('.')) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      Alert.alert(t('common.error'), t('auth.signup.errors.emailInvalid'));
       return false;
     }
 
     if (!password.trim()) {
-      Alert.alert('Error', 'Please enter a password');
+      Alert.alert(t('common.error'), t('auth.signup.errors.password'));
       return false;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
+      Alert.alert(t('common.error'), t('auth.signup.errors.passwordShort'));
       return false;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert(t('common.error'), t('auth.signup.errors.passwordMismatch'));
       return false;
     }
 
@@ -77,11 +79,11 @@ const SignUpScreen = ({ navigation }) => {
     setTimeout(() => {
       setIsLoading(false);
       Alert.alert(
-        'Success!',
-        'Account created successfully. Please sign in.',
+        t('auth.signup.successTitle'),
+        t('auth.signup.successBody'),
         [
           {
-            text: 'OK',
+            text: t('auth.signup.ok'),
             onPress: () => navigation.navigate('Login'),
           },
         ]
@@ -102,20 +104,20 @@ const SignUpScreen = ({ navigation }) => {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.welcomeText}>Create Account</Text>
-            <Text style={styles.subText}>Join BusinessPro to get started</Text>
+            <Text style={styles.welcomeText}>{t('auth.signup.createAccount')}</Text>
+            <Text style={styles.subText}>{t('auth.signup.subtitle')}</Text>
           </View>
 
           {/* Sign Up Form Card */}
           <View style={styles.formCard}>
-            <Text style={styles.formTitle}>Sign Up</Text>
+            <Text style={styles.formTitle}>{t('auth.signup.title')}</Text>
             
             {/* Full Name Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Full Name</Text>
+              <Text style={styles.inputLabel}>{t('auth.signup.fullName')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="Enter your full name"
+                placeholder={t('auth.signup.fullNamePlaceholder')}
                 placeholderTextColor="#757575"
                 value={formData.fullName}
                 onChangeText={(value) => updateFormData('fullName', value)}
@@ -126,10 +128,10 @@ const SignUpScreen = ({ navigation }) => {
 
             {/* Email Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Email Address</Text>
+              <Text style={styles.inputLabel}>{t('auth.signup.emailLabel')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="Enter your email"
+                placeholder={t('auth.signup.emailPlaceholder')}
                 placeholderTextColor="#757575"
                 value={formData.email}
                 onChangeText={(value) => updateFormData('email', value)}
@@ -141,10 +143,10 @@ const SignUpScreen = ({ navigation }) => {
 
             {/* Password Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Password</Text>
+              <Text style={styles.inputLabel}>{t('auth.signup.passwordLabel')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="Create a password (min 6 characters)"
+                placeholder={t('auth.signup.passwordPlaceholder')}
                 placeholderTextColor="#757575"
                 value={formData.password}
                 onChangeText={(value) => updateFormData('password', value)}
@@ -155,10 +157,10 @@ const SignUpScreen = ({ navigation }) => {
 
             {/* Confirm Password Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Confirm Password</Text>
+              <Text style={styles.inputLabel}>{t('auth.signup.confirmPasswordLabel')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="Re-enter your password"
+                placeholder={t('auth.signup.confirmPasswordPlaceholder')}
                 placeholderTextColor="#757575"
                 value={formData.confirmPassword}
                 onChangeText={(value) => updateFormData('confirmPassword', value)}
@@ -170,10 +172,7 @@ const SignUpScreen = ({ navigation }) => {
             {/* Terms and Conditions */}
             <View style={styles.termsContainer}>
               <Text style={styles.termsText}>
-                By signing up, you agree to our{' '}
-                <Text style={styles.termsLink}>Terms of Service</Text>
-                {' '}and{' '}
-                <Text style={styles.termsLink}>Privacy Policy</Text>
+                {t('auth.signup.terms', { tos: t('auth.signup.tos'), privacy: t('auth.signup.privacy') })}
               </Text>
             </View>
 
@@ -184,22 +183,22 @@ const SignUpScreen = ({ navigation }) => {
               disabled={isLoading}
             >
               <Text style={styles.signUpButtonText}>
-                {isLoading ? 'Creating Account...' : 'Create Account'}
+                {isLoading ? t('auth.signup.creatingAccount') : t('auth.signup.createAccountBtn')}
               </Text>
             </TouchableOpacity>
 
             {/* Divider */}
             <View style={styles.dividerContainer}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
+              <Text style={styles.dividerText}>{t('auth.signup.divider')}</Text>
               <View style={styles.dividerLine} />
             </View>
 
             {/* Login Link */}
             <View style={styles.loginContainer}>
-              <Text style={styles.loginText}>Already have an account? </Text>
+              <Text style={styles.loginText}>{t('auth.signup.haveAccount')}</Text>
               <TouchableOpacity onPress={navigateToLogin}>
-                <Text style={styles.loginLink}>Sign In</Text>
+                <Text style={styles.loginLink}>{t('auth.signup.signIn')}</Text>
               </TouchableOpacity>
             </View>
           </View>

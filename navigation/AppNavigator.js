@@ -5,6 +5,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useI18n } from '../i18n/I18nProvider';
 
 // Import screens
 import SplashScreen from '../screens/SplashScreen';
@@ -24,8 +25,9 @@ import ProductDetailsScreen from '../screens/ProductDetailsScreen.js';
 const Stack = createNativeStackNavigator();
 
 const AppNavigator = () => {
+  const { language } = useI18n();
   return (
-    <NavigationContainer>
+    <NavigationContainer key={language}>
       <Stack.Navigator
         initialRouteName="Splash"
         screenOptions={{

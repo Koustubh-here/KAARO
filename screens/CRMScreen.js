@@ -21,6 +21,7 @@ import {
   Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useI18n } from '../i18n/I18nProvider';
 
 // THEME & DESIGN SYSTEM (Consistent with other screens)
 const theme = {
@@ -73,6 +74,7 @@ const CAMPAIGN_CHANNELS = [
 ];
 
 const CRMScreen = ({ navigation }) => {
+  const { t } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
   const [isCampaignModalVisible, setCampaignModalVisible] = useState(false);
 
@@ -89,7 +91,7 @@ const CRMScreen = ({ navigation }) => {
 
   const handleStartCampaign = () => {
     if (!campaignMessage.trim()) {
-      Alert.alert('Error', 'Please enter a campaign message');
+      Alert.alert(t('common.error'), t('crm.alerts.enterMessage'));
       return;
     }
 
@@ -102,9 +104,9 @@ const CRMScreen = ({ navigation }) => {
     
     setCampaignModalVisible(false);
     Alert.alert(
-      'Campaign Sent!',
-      `Your ${campaignChannel} campaign has been sent to ${campaignAudience === 'all' ? 'all customers' : 'specific groups'}.`,
-      [{ text: 'OK' }]
+      t('crm.alerts.sentTitle'),
+      t('crm.alerts.sentBody', { channel: campaignChannel, audience: campaignAudience === 'all' ? t('crm.modal.audienceAll') : t('crm.modal.audienceSpecific') }),
+      [{ text: t('crm.alerts.ok') }]
     );
     
     // Reset state for next time
@@ -117,11 +119,11 @@ const CRMScreen = ({ navigation }) => {
       onPress={() => {
         Alert.alert(
           item.name,
-          `Phone: ${item.phone}\nEmail: ${item.email}\nTotal Spend: ₹${item.totalSpend.toLocaleString('en-IN')}\nLast Purchase: ${item.lastPurchase}`,
+          t('crm.alerts.customerDetails', { phone: item.phone, email: item.email, spend: item.totalSpend.toLocaleString('en-IN'), lastPurchase: item.lastPurchase }),
           [
-            { text: 'Call Customer', onPress: () => Alert.alert('Feature Coming Soon', 'Call customer feature will be available soon.') },
-            { text: 'Send Message', onPress: () => Alert.alert('Feature Coming Soon', 'Send message feature will be available soon.') },
-            { text: 'Cancel', style: 'cancel' }
+            { text: t('crm.alerts.callCustomer'), onPress: () => Alert.alert(t('productDetails.featureComingSoon'), '') },
+            { text: t('crm.alerts.sendMessage'), onPress: () => Alert.alert(t('productDetails.featureComingSoon'), '') },
+            { text: t('crm.alerts.cancel'), style: 'cancel' }
           ]
         );
       }}
@@ -149,7 +151,7 @@ const CRMScreen = ({ navigation }) => {
       <View style={styles.modalBackdrop}>
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Start a New Campaign</Text>
+            <Text style={styles.modalTitle}>{t('crm.modal.title')}</Text>
             <TouchableOpacity onPress={() => setCampaignModalVisible(false)}>
               <Icon name="close" size={24} color={theme.colors.subtleText} />
             </TouchableOpacity>
@@ -157,47 +159,47 @@ const CRMScreen = ({ navigation }) => {
           
           <ScrollView>
              {/* Channel Selection */}
-            <Text style={styles.modalSectionTitle}>1. Choose Channel</Text>
+            <Text style={styles.modalSectionTitle}>{t('crm.modal.step1')}</Text>
             <View style={styles.optionGroup}>
                 {CAMPAIGN_CHANNELS.map(channel => (
                     <TouchableOpacity key={channel.key} style={[styles.optionButton, campaignChannel === channel.key && styles.optionButtonActive]} onPress={() => setCampaignChannel(channel.key)}>
                         <Icon name={channel.icon} size={20} color={campaignChannel === channel.key ? theme.colors.primary : theme.colors.subtleText} />
-                        <Text style={[styles.optionButtonText, campaignChannel === channel.key && styles.optionButtonTextActive]}>{channel.name}</Text>
+                        <Text style={[styles.optionButtonText, campaignChannel === channel.key && styles.optionButtonTextActive]}>{t(`crm.modal.channels.${channel.key}`)}</Text>
                     </TouchableOpacity>
                 ))}
             </View>
 
             {/* Audience Selection */}
-            <Text style={styles.modalSectionTitle}>2. Select Audience</Text>
+            <Text style={styles.modalSectionTitle}>{t('crm.modal.step2')}</Text>
             <View style={styles.optionGroup}>
                 <TouchableOpacity style={[styles.optionButton, campaignAudience === 'all' && styles.optionButtonActive]} onPress={() => setCampaignAudience('all')}>
-                    <Text style={[styles.optionButtonText, campaignAudience === 'all' && styles.optionButtonTextActive]}>All Customers</Text>
+                    <Text style={[styles.optionButtonText, campaignAudience === 'all' && styles.optionButtonTextActive]}>{t('crm.modal.audienceAll')}</Text>
                 </TouchableOpacity>
                  <TouchableOpacity style={[styles.optionButton, campaignAudience === 'specific' && styles.optionButtonActive]} onPress={() => setCampaignAudience('specific')}>
-                    <Text style={[styles.optionButtonText, campaignAudience === 'specific' && styles.optionButtonTextActive]}>Specific Groups</Text>
+                    <Text style={[styles.optionButtonText, campaignAudience === 'specific' && styles.optionButtonTextActive]}>{t('crm.modal.audienceSpecific')}</Text>
                 </TouchableOpacity>
             </View>
 
             {/* Message Input */}
-            <Text style={styles.modalSectionTitle}>3. Write Message</Text>
+            <Text style={styles.modalSectionTitle}>{t('crm.modal.step3')}</Text>
             <TextInput
                 style={styles.messageInput}
-                placeholder={`Write your ${campaignChannel} message here...`}
+                placeholder={t('crm.modal.messagePlaceholder', { channel: campaignChannel })}
                 placeholderTextColor={theme.colors.subtleText}
                 multiline
                 value={campaignMessage}
                 onChangeText={setCampaignMessage}
             />
             <View style={styles.templateContainer}>
-                <Text style={styles.templateText}>Use a template: </Text>
+                <Text style={styles.templateText}>{t('crm.modal.useTemplate')} </Text>
                 <TouchableOpacity onPress={() => setCampaignMessage('🌟 Diwali Offer! Get 20% off on all items. Use code DIWALI20. Valid till this weekend!')}>
-                    <Text style={styles.templateLink}>Diwali Offer</Text>
+                    <Text style={styles.templateLink}>{t('crm.modal.templateDiwali')}</Text>
                 </TouchableOpacity>
             </View>
           </ScrollView>
 
           <TouchableOpacity style={[styles.primaryButton, !campaignMessage && {opacity: 0.5}]} onPress={handleStartCampaign} disabled={!campaignMessage}>
-            <Text style={styles.primaryButtonText}>Send Campaign</Text>
+            <Text style={styles.primaryButtonText}>{t('crm.modal.sendCampaign')}</Text>
             <Icon name="send" size={20} color={theme.colors.white} />
           </TouchableOpacity>
         </View>
@@ -217,7 +219,7 @@ const CRMScreen = ({ navigation }) => {
         >
           <Icon name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={theme.typography.h1}>Customers</Text>
+        <Text style={theme.typography.h1}>{t('crm.title')}</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -225,7 +227,7 @@ const CRMScreen = ({ navigation }) => {
         <Icon name="search" size={24} color={theme.colors.subtleText} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search customers by name..."
+          placeholder={t('crm.searchPlaceholder')}
           placeholderTextColor={theme.colors.subtleText}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -233,7 +235,7 @@ const CRMScreen = ({ navigation }) => {
       </View>
 
       <TouchableOpacity style={styles.primaryButton} onPress={() => setCampaignModalVisible(true)}>
-        <Text style={styles.primaryButtonText}>Start Campaign</Text>
+        <Text style={styles.primaryButtonText}>{t('crm.startCampaign')}</Text>
         <Icon name="campaign" size={24} color={theme.colors.white} />
       </TouchableOpacity>
 

@@ -2,7 +2,7 @@
  * LanguageSelectScreen.js
  * Language selection screen with Indian languages
  */
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,41 +14,40 @@ import {
   SafeAreaView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useI18n } from '../i18n/I18nProvider';
 
 const { width, height } = Dimensions.get('window');
 
 const LanguageSelectScreen = ({ navigation }) => {
-  const [selectedLanguage, setSelectedLanguage] = useState('English');
+  const { t, setLanguage, language } = useI18n();
+  const [selectedLanguageCode, setSelectedLanguageCode] = useState(language);
 
-  const languages = [
-    { name: 'English', code: 'en' },
-    { name: 'Hindi', code: 'hi' },
-    { name: 'Bengali', code: 'bn' },
-    { name: 'Telugu', code: 'te' },
-    { name: 'Marathi', code: 'mr' },
-    { name: 'Tamil', code: 'ta' },
-    { name: 'Gujarati', code: 'gu' },
-    { name: 'Urdu', code: 'ur' },
-    { name: 'Kannada', code: 'kn' },
-    { name: 'Odia', code: 'or' },
-    { name: 'Punjabi', code: 'pa' },
-    { name: 'Assamese', code: 'as' },
-    { name: 'Maithili', code: 'mai' },
-    { name: 'Malayalam', code: 'ml' },
-  ];
+  // Update selected language when the context language changes
+  React.useEffect(() => {
+    setSelectedLanguageCode(language);
+  }, [language]);
 
-  const handleLanguageSelect = (language) => {
-    setSelectedLanguage(language.name);
+  const languages = useMemo(() => ([
+    { name: t('language.english'), code: 'en' },
+    { name: t('language.hindi'), code: 'hi' },
+    { name: t('language.telugu'), code: 'te' },
+  ]), [t]);
+
+  const handleLanguageSelect = (lang) => {
+    setSelectedLanguageCode(lang.code);
+    setLanguage(lang.code);
   };
 
   const handleContinue = () => {
-    // You can store the selected language in AsyncStorage or Redux here
-    // For now, we'll just navigate to the Login screen
-    navigation.replace('Login');
+    // Ensure selected language is applied before navigating
+    setLanguage(selectedLanguageCode);
+    setTimeout(() => {
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }, 0);
   };
 
   const renderLanguageItem = (language) => {
-    const isSelected = selectedLanguage === language.name;
+    const isSelected = selectedLanguageCode === language.code;
     
     return (
       <TouchableOpacity
@@ -90,13 +89,13 @@ const LanguageSelectScreen = ({ navigation }) => {
         >
           <Icon name="arrow-back" size={24} color="#0D47A1" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Language</Text>
+        <Text style={styles.headerTitle}>{t('language.title')}</Text>
         <View style={styles.placeholder} />
       </View>
 
       {/* Content */}
       <View style={styles.content}>
-        <Text style={styles.subtitle}>Select your preferred language</Text>
+        <Text style={styles.subtitle}>{t('language.selectPrompt')}</Text>
         
         <ScrollView 
           style={styles.languageList}
@@ -114,7 +113,7 @@ const LanguageSelectScreen = ({ navigation }) => {
           onPress={handleContinue}
           activeOpacity={0.8}
         >
-          <Text style={styles.continueButtonText}>Continue</Text>
+          <Text style={styles.continueButtonText}>{t('common.continue')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

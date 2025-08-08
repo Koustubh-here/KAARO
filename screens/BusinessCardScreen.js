@@ -15,10 +15,12 @@ import {
   Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useI18n } from '../i18n/I18nProvider';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 const BusinessCardScreen = ({ navigation, route }) => {
+  const { t } = useI18n();
   const { category, businessName, phoneNumber } = route.params || {};
   const [isCreating, setIsCreating] = useState(false);
 
@@ -29,11 +31,11 @@ const BusinessCardScreen = ({ navigation, route }) => {
     setTimeout(() => {
       setIsCreating(false);
       Alert.alert(
-        'Success!',
-        'Your digital business card has been created successfully.',
+        t('businessCard.successTitle'),
+        t('businessCard.successBody'),
         [
           {
-            text: 'Continue to App',
+            text: t('businessCard.continueToApp'),
             onPress: () => {
               // Navigate to main app
               navigation.navigate('Home');
@@ -46,15 +48,15 @@ const BusinessCardScreen = ({ navigation, route }) => {
 
   const handleSkipForNow = () => {
     Alert.alert(
-      'Skip Business Card',
-      'You can create your business card later from the settings.',
+      t('businessCard.skipTitle'),
+      t('businessCard.skipBody'),
       [
         {
-          text: 'Cancel',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Skip',
+          text: t('businessCard.skip'),
           onPress: () => {
             // Navigate to main app
             navigation.navigate('Home');
@@ -75,16 +77,16 @@ const BusinessCardScreen = ({ navigation, route }) => {
         <TouchableOpacity onPress={goBack} style={styles.backButton}>
           <Icon name="close" size={24} color="#212121" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Business Card</Text>
+        <Text style={styles.headerTitle}>{t('businessCard.title')}</Text>
         <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Title Section */}
         <View style={styles.titleContainer}>
-          <Text style={styles.mainTitle}>Create your digital business card</Text>
+          <Text style={styles.mainTitle}>{t('businessCard.createTitle')}</Text>
           <Text style={styles.subtitle}>
-            Share your contact information with customers and partners
+            {t('businessCard.createSubtitle')}
           </Text>
         </View>
 
@@ -132,19 +134,19 @@ const BusinessCardScreen = ({ navigation, route }) => {
         <View style={styles.featuresContainer}>
           <View style={styles.featureItem}>
             <Icon name="phone" size={20} color="#2E7D32" />
-            <Text style={styles.featureText}>Contact information included</Text>
+            <Text style={styles.featureText}>{t('businessCard.features.contactInfo')}</Text>
           </View>
           <View style={styles.featureItem}>
             <Icon name="share" size={20} color="#2E7D32" />
-            <Text style={styles.featureText}>Easy sharing via QR code</Text>
+            <Text style={styles.featureText}>{t('businessCard.features.qrShare')}</Text>
           </View>
           <View style={styles.featureItem}>
             <Icon name="edit" size={20} color="#2E7D32" />
-            <Text style={styles.featureText}>Customizable design and content</Text>
+            <Text style={styles.featureText}>{t('businessCard.features.customizable')}</Text>
           </View>
           <View style={styles.featureItem}>
             <Icon name="cloud" size={20} color="#2E7D32" />
-            <Text style={styles.featureText}>Always up-to-date information</Text>
+            <Text style={styles.featureText}>{t('businessCard.features.upToDate')}</Text>
           </View>
         </View>
       </ScrollView>
@@ -157,7 +159,7 @@ const BusinessCardScreen = ({ navigation, route }) => {
           disabled={isCreating}
         >
           <Text style={styles.createButtonText}>
-            {isCreating ? 'Creating Business Card...' : 'Create Business Card'}
+            {isCreating ? t('businessCard.creating') : t('businessCard.createBtn')}
           </Text>
         </TouchableOpacity>
 
@@ -166,7 +168,7 @@ const BusinessCardScreen = ({ navigation, route }) => {
           onPress={handleSkipForNow}
           disabled={isCreating}
         >
-          <Text style={styles.skipButtonText}>Skip for Now</Text>
+          <Text style={styles.skipButtonText}>{t('businessCard.skip')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

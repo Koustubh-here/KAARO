@@ -17,6 +17,7 @@ import {
   Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useI18n } from '../i18n/I18nProvider';
 
 const theme = {
   colors: {
@@ -63,17 +64,18 @@ const CATEGORIES = [
 ];
 
 const BusinessCategoryScreen = ({ navigation }) => {
+  const { t } = useI18n();
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [businessName, setBusinessName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
 
   const handleContinue = () => {
     if (!selectedCategory) {
-      Alert.alert('Select Category', 'Please choose a business category.');
+      Alert.alert(t('businessCategory.alerts.selectCategoryTitle'), t('businessCategory.alerts.selectCategoryBody'));
       return;
     }
     if (!businessName.trim()) {
-      Alert.alert('Business Name', 'Please enter your business name.');
+      Alert.alert(t('businessCategory.alerts.businessNameTitle'), t('businessCategory.alerts.businessNameBody'));
       return;
     }
     navigation.navigate('BusinessCardScreen', {
@@ -92,20 +94,20 @@ const BusinessCategoryScreen = ({ navigation }) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Icon name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Business Category</Text>
+        <Text style={styles.headerTitle}>{t('businessCategory.title')}</Text>
         <View style={styles.headerBtn} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: theme.spacing.xl }}>
         {/* Intro */}
         <View style={styles.section}>
-          <Text style={theme.typography.h1}>Tell us about your business</Text>
-          <Text style={[theme.typography.body, { marginTop: theme.spacing.xs }]}>Select a category and add basic details to personalize your experience.</Text>
+          <Text style={theme.typography.h1}>{t('businessCategory.introTitle')}</Text>
+          <Text style={[theme.typography.body, { marginTop: theme.spacing.xs }]}>{t('businessCategory.introBody')}</Text>
         </View>
 
         {/* Category Grid */}
         <View style={styles.section}>
-          <Text style={theme.typography.h2}>Choose Category</Text>
+          <Text style={theme.typography.h2}>{t('businessCategory.chooseCategory')}</Text>
           <View style={styles.grid}>
             {CATEGORIES.map((c) => {
               const active = selectedCategory === c.key;
@@ -119,7 +121,7 @@ const BusinessCategoryScreen = ({ navigation }) => {
                   <View style={[styles.iconWrap, active && { backgroundColor: `${theme.colors.primary}15` }]}>
                     <Icon name={c.icon} size={22} color={active ? theme.colors.primary : theme.colors.subtleText} />
                   </View>
-                  <Text style={[styles.cardLabel, active && styles.cardLabelActive]}>{c.key}</Text>
+                  <Text style={[styles.cardLabel, active && styles.cardLabelActive]}>{t(`businessCategory.categories.${c.key}`)}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -128,22 +130,22 @@ const BusinessCategoryScreen = ({ navigation }) => {
 
         {/* Basic Details */}
         <View style={styles.section}>
-          <Text style={theme.typography.h2}>Business Details</Text>
+          <Text style={theme.typography.h2}>{t('businessCategory.businessDetails')}</Text>
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Business Name</Text>
+            <Text style={styles.inputLabel}>{t('businessCategory.businessName')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g., Sunrise Cafe"
+              placeholder={t('businessCategory.businessNamePlaceholder')}
               placeholderTextColor={theme.colors.subtleText}
               value={businessName}
               onChangeText={setBusinessName}
             />
           </View>
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Phone (optional)</Text>
+            <Text style={styles.inputLabel}>{t('businessCategory.phoneOptional')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g., 9876543210"
+              placeholder={t('businessCategory.phonePlaceholder')}
               placeholderTextColor={theme.colors.subtleText}
               keyboardType="phone-pad"
               value={phoneNumber}
@@ -158,7 +160,7 @@ const BusinessCategoryScreen = ({ navigation }) => {
           onPress={handleContinue}
           disabled={!selectedCategory}
         >
-          <Text style={styles.primaryButtonText}>Continue</Text>
+          <Text style={styles.primaryButtonText}>{t('businessCategory.continue')}</Text>
           <Icon name="arrow-forward" size={20} color={theme.colors.white} />
         </TouchableOpacity>
       </ScrollView>

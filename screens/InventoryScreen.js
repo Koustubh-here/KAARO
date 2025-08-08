@@ -20,6 +20,7 @@ import {
   Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useI18n } from '../i18n/I18nProvider';
 
 // THEME & DESIGN SYSTEM (Consistent with Home.js)
 const theme = {
@@ -56,7 +57,7 @@ const theme = {
 };
 
 // MOCK DATA
-const CATEGORIES = ['All', 'Food', 'Beverages', 'Snacks', 'Dairy'];
+const CATEGORIES_KEYS = ['all', 'food', 'beverages', 'snacks', 'dairy'];
 
 const ALL_PRODUCTS = [
   { id: '1', name: 'Organic Apples', category: 'Food', stock: 100, image: 'https://images.pexels.com/photos/102104/pexels-photo-102104.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2' },
@@ -70,15 +71,16 @@ const ALL_PRODUCTS = [
 ];
 
 const InventoryScreen = ({ navigation }) => {
+  const { t } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   // Memoized filtering for performance
   const filteredProducts = useMemo(() => {
     let products = ALL_PRODUCTS;
 
-    if (selectedCategory !== 'All') {
-      products = products.filter(p => p.category === selectedCategory);
+    if (selectedCategory !== 'all') {
+      products = products.filter(p => p.category.toLowerCase() === selectedCategory);
     }
 
     if (searchQuery) {
@@ -124,16 +126,16 @@ const InventoryScreen = ({ navigation }) => {
         >
           <Icon name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={theme.typography.h1}>Inventory</Text>
+        <Text style={theme.typography.h1}>{t('inventory.title')}</Text>
         <TouchableOpacity 
           style={styles.addButton} 
           onPress={() => {
             Alert.alert(
-              'Add Product',
-              'Add a new product to your inventory',
+              t('inventory.addProductTitle'),
+              t('inventory.addProductBody'),
               [
-                { text: 'Add Product', onPress: () => Alert.alert('Feature Coming Soon', 'Add product feature will be available soon.') },
-                { text: 'Cancel', style: 'cancel' }
+                { text: t('inventory.addProduct'), onPress: () => Alert.alert(t('productDetails.featureComingSoon'), '') },
+                { text: t('inventory.cancel'), style: 'cancel' }
               ]
             );
           }}
@@ -146,7 +148,7 @@ const InventoryScreen = ({ navigation }) => {
         <Icon name="search" size={24} color={theme.colors.subtleText} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search products..."
+          placeholder={t('inventory.searchPlaceholder')}
           placeholderTextColor={theme.colors.subtleText}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -154,18 +156,18 @@ const InventoryScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.categoriesContainer}>
-        <Text style={styles.sectionTitle}>Categories</Text>
+        <Text style={styles.sectionTitle}>{t('inventory.categories')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesScroll}>
-          {CATEGORIES.map(category => {
-            const isActive = category === selectedCategory;
+          {CATEGORIES_KEYS.map(categoryKey => {
+            const isActive = categoryKey === selectedCategory;
             return (
               <TouchableOpacity
-                key={category}
+                key={categoryKey}
                 style={[styles.categoryButton, isActive && styles.categoryButtonActive]}
-                onPress={() => setSelectedCategory(category)}
+                onPress={() => setSelectedCategory(categoryKey)}
               >
                 <Text style={[styles.categoryButtonText, isActive && styles.categoryButtonTextActive]}>
-                  {category}
+                  {t(`inventory.categoryList.${categoryKey}`)}
                 </Text>
               </TouchableOpacity>
             );
@@ -174,7 +176,7 @@ const InventoryScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.productListContainer}>
-        <Text style={styles.sectionTitle}>Products ({filteredProducts.length})</Text>
+        <Text style={styles.sectionTitle}>{`${t('inventory.products')} (${filteredProducts.length})`}</Text>
         <FlatList
           data={filteredProducts}
           renderItem={renderProductItem}
@@ -184,8 +186,8 @@ const InventoryScreen = ({ navigation }) => {
           ListEmptyComponent={
             <View style={styles.emptyStateContainer}>
                 <Icon name="search-off" size={64} color={theme.colors.border} />
-                <Text style={styles.emptyStateText}>No products found.</Text>
-                <Text style={styles.emptyStateSubtext}>Try adjusting your search or filters.</Text>
+                <Text style={styles.emptyStateText}>{t('inventory.noProducts')}</Text>
+                <Text style={styles.emptyStateSubtext}>{t('inventory.tryAdjusting')}</Text>
             </View>
           }
         />

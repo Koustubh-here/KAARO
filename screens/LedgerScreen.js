@@ -17,6 +17,7 @@ import {
   Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useI18n } from '../i18n/I18nProvider';
 
 // THEME & DESIGN SYSTEM (Consistent with other screens)
 const theme = {
@@ -53,7 +54,7 @@ const theme = {
 };
 
 // MOCK DATA
-const FILTERS = ['All', 'Income', 'Expenses'];
+const FILTERS = ['all', 'income', 'expenses'];
 
 const ALL_TRANSACTIONS = [
   { id: '1', type: 'Income', description: 'Sale to Customer #1234', category: 'Product Sale', date: '2024-08-15', amount: 2500 },
@@ -66,7 +67,8 @@ const ALL_TRANSACTIONS = [
 ];
 
 const LedgerScreen = ({ navigation }) => {
-  const [activeFilter, setActiveFilter] = useState('All');
+  const { t } = useI18n();
+  const [activeFilter, setActiveFilter] = useState('all');
 
   const { filteredTransactions, totalIncome, totalExpenses } = useMemo(() => {
     let transactions = ALL_TRANSACTIONS;
@@ -78,8 +80,8 @@ const LedgerScreen = ({ navigation }) => {
       else expenses += t.amount;
     });
 
-    if (activeFilter !== 'All') {
-      transactions = transactions.filter(t => t.type === activeFilter);
+    if (activeFilter !== 'all') {
+      transactions = transactions.filter(t => t.type.toLowerCase() === (activeFilter === 'expenses' ? 'expenses' : activeFilter));
     }
 
     return { filteredTransactions: transactions, totalIncome: income, totalExpenses: expenses };
@@ -116,17 +118,17 @@ const LedgerScreen = ({ navigation }) => {
         >
           <Icon name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={theme.typography.h1}>Ledger</Text>
+        <Text style={theme.typography.h1}>{t('ledger.title')}</Text>
         <TouchableOpacity 
           style={styles.addButton} 
           onPress={() => {
             Alert.alert(
-              'Add Transaction',
-              'Choose transaction type',
+              t('ledger.addTransactionTitle'),
+              t('ledger.addTransactionBody'),
               [
-                { text: 'Income', onPress: () => navigation.navigate('AddTransactionScreen', { type: 'Income' }) },
-                { text: 'Expense', onPress: () => navigation.navigate('AddTransactionScreen', { type: 'Expense' }) },
-                { text: 'Cancel', style: 'cancel' }
+                { text: t('ledger.income'), onPress: () => navigation.navigate('AddTransactionScreen', { type: t('types.income') }) },
+                { text: t('ledger.expense'), onPress: () => navigation.navigate('AddTransactionScreen', { type: t('types.expense') }) },
+                { text: t('ledger.cancel'), style: 'cancel' }
               ]
             );
           }}
@@ -137,11 +139,11 @@ const LedgerScreen = ({ navigation }) => {
 
       <View style={styles.summaryRow}>
         <View style={[styles.summaryCard, theme.shadow, { marginRight: theme.spacing.md }]}>
-          <Text style={styles.summaryLabel}>Total Income</Text>
+          <Text style={styles.summaryLabel}>{t('ledger.totalIncome')}</Text>
           <Text style={styles.summaryValueIncome}>₹{totalIncome.toLocaleString('en-IN')}</Text>
         </View>
         <View style={[styles.summaryCard, theme.shadow]}>
-          <Text style={styles.summaryLabel}>Total Expenses</Text>
+          <Text style={styles.summaryLabel}>{t('ledger.totalExpenses')}</Text>
           <Text style={styles.summaryValueExpense}>₹{totalExpenses.toLocaleString('en-IN')}</Text>
         </View>
       </View>
@@ -156,7 +158,7 @@ const LedgerScreen = ({ navigation }) => {
               onPress={() => setActiveFilter(filter)}
             >
               <Text style={[styles.filterButtonText, isActive && styles.filterButtonTextActive]}>
-                {filter}
+                {t(`ledger.filters.${filter}`)}
               </Text>
             </TouchableOpacity>
           );
@@ -164,7 +166,7 @@ const LedgerScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.transactionListContainer}>
-        <Text style={styles.sectionTitle}>Recent Transactions</Text>
+        <Text style={styles.sectionTitle}>{t('ledger.recentTransactions')}</Text>
         <FlatList
           data={filteredTransactions}
           renderItem={renderTransactionItem}
@@ -174,8 +176,8 @@ const LedgerScreen = ({ navigation }) => {
           ListEmptyComponent={
             <View style={styles.emptyStateContainer}>
                 <Icon name="receipt-long" size={64} color={theme.colors.border} />
-                <Text style={styles.emptyStateText}>No transactions found.</Text>
-                <Text style={styles.emptyStateSubtext}>Add a new transaction to get started.</Text>
+                <Text style={styles.emptyStateText}>{t('ledger.noTransactions')}</Text>
+                <Text style={styles.emptyStateSubtext}>{t('ledger.addNewToStart')}</Text>
             </View>
           }
         />

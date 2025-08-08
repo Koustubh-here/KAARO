@@ -16,6 +16,7 @@ import {
   TextInput,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useI18n } from '../i18n/I18nProvider';
 
 const theme = {
   colors: {
@@ -51,6 +52,7 @@ const theme = {
 };
 
 const ProductDetailsScreen = ({ navigation, route }) => {
+  const { t } = useI18n();
   const { product } = route.params || {
     product: {
       id: '1',
@@ -76,20 +78,20 @@ const ProductDetailsScreen = ({ navigation, route }) => {
   const handleUpdateStock = () => {
     const updatedStock = parseInt(newStock);
     if (isNaN(updatedStock) || updatedStock < 0) {
-      Alert.alert('Error', 'Please enter a valid stock number');
+      Alert.alert(t('productDetails.errorTitle'), t('productDetails.errorBody'));
       return;
     }
 
     Alert.alert(
-      'Update Stock',
-      `Update stock from ${product.stock} to ${updatedStock}?`,
+      t('productDetails.updateStockTitle'),
+      t('productDetails.updateStockBody', { from: product.stock, to: updatedStock }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('productDetails.cancel'), style: 'cancel' },
         {
-          text: 'Update',
+          text: t('productDetails.update'),
           onPress: () => {
             // In real app, this would update the stock via API
-            Alert.alert('Success', 'Stock updated successfully!');
+            Alert.alert(t('productDetails.successTitle'), t('productDetails.successBody'));
             setEditingStock(false);
             product.stock = updatedStock; // Update locally for demo
           },
@@ -105,7 +107,7 @@ const ProductDetailsScreen = ({ navigation, route }) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Product Details</Text>
+        <Text style={styles.headerTitle}>{t('productDetails.title')}</Text>
         <TouchableOpacity style={styles.editButton}>
           <Icon name="edit" size={24} color={theme.colors.primary} />
         </TouchableOpacity>
@@ -120,7 +122,7 @@ const ProductDetailsScreen = ({ navigation, route }) => {
             <Text style={styles.productCategory}>{product.category}</Text>
             <View style={styles.stockContainer}>
               <Text style={[styles.stockText, { color: getStockStatusColor(product.stock) }]}>
-                {product.stock} in stock
+                {t('productDetails.inStock', { count: product.stock })}
               </Text>
               <TouchableOpacity
                 style={styles.editStockButton}
@@ -135,17 +137,17 @@ const ProductDetailsScreen = ({ navigation, route }) => {
         {/* Stock Update Section */}
         {editingStock && (
           <View style={styles.editStockCard}>
-            <Text style={styles.sectionTitle}>Update Stock</Text>
+            <Text style={styles.sectionTitle}>{t('productDetails.updateStockTitle')}</Text>
             <View style={styles.stockEditRow}>
               <TextInput
                 style={styles.stockInput}
                 value={newStock}
                 onChangeText={setNewStock}
                 keyboardType="numeric"
-                placeholder="Enter new stock"
+                placeholder={t('productDetails.updateStockTitle')}
               />
               <TouchableOpacity style={styles.updateButton} onPress={handleUpdateStock}>
-                <Text style={styles.updateButtonText}>Update</Text>
+                <Text style={styles.updateButtonText}>{t('productDetails.update')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.cancelButton}
@@ -154,7 +156,7 @@ const ProductDetailsScreen = ({ navigation, route }) => {
                   setNewStock(product.stock.toString());
                 }}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>{t('productDetails.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -162,46 +164,46 @@ const ProductDetailsScreen = ({ navigation, route }) => {
 
         {/* Product Details */}
         <View style={styles.detailsCard}>
-          <Text style={styles.sectionTitle}>Details</Text>
+          <Text style={styles.sectionTitle}>{t('productDetails.details')}</Text>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Price:</Text>
+            <Text style={styles.detailLabel}>{t('productDetails.price')}</Text>
             <Text style={styles.detailValue}>₹{product.price}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Supplier:</Text>
+            <Text style={styles.detailLabel}>{t('productDetails.supplier')}</Text>
             <Text style={styles.detailValue}>{product.supplier}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Last Updated:</Text>
+            <Text style={styles.detailLabel}>{t('productDetails.lastUpdated')}</Text>
             <Text style={styles.detailValue}>{product.lastUpdated}</Text>
           </View>
         </View>
 
         {/* Quick Actions */}
         <View style={styles.actionsCard}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <Text style={styles.sectionTitle}>{t('productDetails.quickActions')}</Text>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => Alert.alert('Feature Coming Soon', 'Stock history will be available soon.')}
+            onPress={() => Alert.alert(t('productDetails.featureComingSoon'), '')}
           >
             <Icon name="history" size={24} color={theme.colors.primary} />
-            <Text style={styles.actionText}>View Stock History</Text>
+            <Text style={styles.actionText}>{t('productDetails.viewStockHistory')}</Text>
             <Icon name="chevron-right" size={24} color={theme.colors.subtleText} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => Alert.alert('Feature Coming Soon', 'Product editing will be available soon.')}
+            onPress={() => Alert.alert(t('productDetails.featureComingSoon'), '')}
           >
             <Icon name="edit" size={24} color={theme.colors.primary} />
-            <Text style={styles.actionText}>Edit Product Details</Text>
+            <Text style={styles.actionText}>{t('productDetails.editProductDetails')}</Text>
             <Icon name="chevron-right" size={24} color={theme.colors.subtleText} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => Alert.alert('Feature Coming Soon', 'Product analytics will be available soon.')}
+            onPress={() => Alert.alert(t('productDetails.featureComingSoon'), '')}
           >
             <Icon name="analytics" size={24} color={theme.colors.primary} />
-            <Text style={styles.actionText}>View Analytics</Text>
+            <Text style={styles.actionText}>{t('productDetails.viewAnalytics')}</Text>
             <Icon name="chevron-right" size={24} color={theme.colors.subtleText} />
           </TouchableOpacity>
         </View>

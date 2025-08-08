@@ -17,6 +17,7 @@ import {
   Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useI18n } from '../i18n/I18nProvider';
 
 const theme = {
   colors: {
@@ -45,7 +46,8 @@ const theme = {
 };
 
 const AddTransactionScreen = ({ navigation, route }) => {
-  const { type } = route.params || { type: 'Income' }; // 'Income' or 'Expense'
+  const { t } = useI18n();
+  const { type } = route.params || { type: t('types.income') }; // 'Income' or 'Expense'
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
@@ -60,12 +62,12 @@ const AddTransactionScreen = ({ navigation, route }) => {
 
   const handleSaveTransaction = () => {
     if (!formData.description.trim() || !formData.amount.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      Alert.alert(t('common.error'), t('addTransaction.errors.fillAll'));
       return;
     }
 
     if (isNaN(parseFloat(formData.amount))) {
-      Alert.alert('Error', 'Please enter a valid amount');
+      Alert.alert(t('common.error'), t('addTransaction.errors.amountInvalid'));
       return;
     }
 
@@ -75,11 +77,11 @@ const AddTransactionScreen = ({ navigation, route }) => {
     setTimeout(() => {
       setIsLoading(false);
       Alert.alert(
-        'Success!',
-        `${type} transaction has been added successfully.`,
+        t('addTransaction.successTitle'),
+        t('addTransaction.successBody', { type }),
         [
           {
-            text: 'OK',
+            text: t('common.ok'),
             onPress: () => navigation.goBack(),
           },
         ]
@@ -87,7 +89,7 @@ const AddTransactionScreen = ({ navigation, route }) => {
     }, 1500);
   };
 
-  const isExpense = type === 'Expense';
+  const isExpense = type.toLowerCase() === t('types.expense').toLowerCase() || type === 'Expense';
   const color = isExpense ? theme.colors.danger : theme.colors.success;
 
   return (
@@ -101,7 +103,7 @@ const AddTransactionScreen = ({ navigation, route }) => {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Icon name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Add {type}</Text>
+          <Text style={styles.headerTitle}>{t('addTransaction.addType', { type })}</Text>
           <View style={styles.placeholder} />
         </View>
 
@@ -110,15 +112,15 @@ const AddTransactionScreen = ({ navigation, route }) => {
           <View style={styles.formCard}>
             <View style={[styles.typeIndicator, { backgroundColor: `${color}20` }]}>
               <Icon name={isExpense ? 'trending-down' : 'trending-up'} size={24} color={color} />
-              <Text style={[styles.typeText, { color }]}>{type} Transaction</Text>
+              <Text style={[styles.typeText, { color }]}>{t('addTransaction.typeTransaction', { type })}</Text>
             </View>
 
             {/* Description Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Description *</Text>
+              <Text style={styles.inputLabel}>{t('addTransaction.description')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder={`Enter ${type.toLowerCase()} description`}
+                placeholder={t('addTransaction.descriptionPlaceholder', { typeLower: isExpense ? t('types.expense').toLowerCase() : t('types.income').toLowerCase() })}
                 placeholderTextColor={theme.colors.subtleText}
                 value={formData.description}
                 onChangeText={(value) => updateFormData('description', value)}
@@ -128,10 +130,10 @@ const AddTransactionScreen = ({ navigation, route }) => {
 
             {/* Amount Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Amount *</Text>
+              <Text style={styles.inputLabel}>{t('addTransaction.amount')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="0.00"
+                placeholder={t('addTransaction.amountPlaceholder')}
                 placeholderTextColor={theme.colors.subtleText}
                 value={formData.amount}
                 onChangeText={(value) => updateFormData('amount', value)}
@@ -141,10 +143,10 @@ const AddTransactionScreen = ({ navigation, route }) => {
 
             {/* Category Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Category</Text>
+              <Text style={styles.inputLabel}>{t('addTransaction.category')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder={isExpense ? "e.g., Office Supplies, Marketing" : "e.g., Product Sale, Services"}
+                placeholder={isExpense ? t('addTransaction.categoryPlaceholderExpense') : t('addTransaction.categoryPlaceholderIncome')}
                 placeholderTextColor={theme.colors.subtleText}
                 value={formData.category}
                 onChangeText={(value) => updateFormData('category', value)}
@@ -154,10 +156,10 @@ const AddTransactionScreen = ({ navigation, route }) => {
 
             {/* Date Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Date</Text>
+              <Text style={styles.inputLabel}>{t('addTransaction.date')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="YYYY-MM-DD"
+                placeholder={t('addTransaction.datePlaceholder')}
                 placeholderTextColor={theme.colors.subtleText}
                 value={formData.date}
                 onChangeText={(value) => updateFormData('date', value)}
@@ -175,7 +177,7 @@ const AddTransactionScreen = ({ navigation, route }) => {
               disabled={isLoading}
             >
               <Text style={styles.saveButtonText}>
-                {isLoading ? 'Saving...' : `Save ${type}`}
+                {isLoading ? t('addTransaction.saving') : t('addTransaction.saveType', { type })}
               </Text>
             </TouchableOpacity>
           </View>

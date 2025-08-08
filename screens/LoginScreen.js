@@ -16,20 +16,22 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useI18n } from '../i18n/I18nProvider';
 
 const LoginScreen = ({ navigation }) => {
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('common.error'), t('auth.login.errors.fillAll'));
       return;
     }
 
     if (!email.includes('@')) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      Alert.alert(t('common.error'), t('auth.login.errors.emailInvalid'));
       return;
     }
 
@@ -39,11 +41,11 @@ const LoginScreen = ({ navigation }) => {
     setTimeout(() => {
       setIsLoading(false);
       Alert.alert(
-        'Success', 
-        'Login successful!',
+        t('common.success'), 
+        t('auth.login.successLogin'),
         [
           {
-            text: 'Continue',
+            text: t('auth.login.continue'),
             onPress: () => {
               // Navigate to BusinessCategory screen to set up business profile
               navigation.navigate('BusinessCategoryScreen');
@@ -67,20 +69,20 @@ const LoginScreen = ({ navigation }) => {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.welcomeText}>Welcome Back!</Text>
-            <Text style={styles.subText}>Sign in to continue to BusinessPro</Text>
+            <Text style={styles.welcomeText}>{t('auth.login.welcome')}</Text>
+            <Text style={styles.subText}>{t('auth.login.subtitle')}</Text>
           </View>
 
           {/* Login Form Card */}
           <View style={styles.formCard}>
-            <Text style={styles.formTitle}>Sign In</Text>
+            <Text style={styles.formTitle}>{t('auth.login.title')}</Text>
             
             {/* Email Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Email Address</Text>
+              <Text style={styles.inputLabel}>{t('auth.login.emailLabel')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="Enter your email"
+                placeholder={t('auth.login.emailPlaceholder')}
                 placeholderTextColor="#757575"
                 value={email}
                 onChangeText={setEmail}
@@ -92,10 +94,10 @@ const LoginScreen = ({ navigation }) => {
 
             {/* Password Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Password</Text>
+              <Text style={styles.inputLabel}>{t('auth.login.passwordLabel')}</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="Enter your password"
+                placeholder={t('auth.login.passwordPlaceholder')}
                 placeholderTextColor="#757575"
                 value={password}
                 onChangeText={setPassword}
@@ -106,7 +108,7 @@ const LoginScreen = ({ navigation }) => {
 
             {/* Forgot Password Link */}
             <TouchableOpacity style={styles.forgotPasswordContainer}>
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              <Text style={styles.forgotPasswordText}>{t('auth.login.forgotPassword')}</Text>
             </TouchableOpacity>
 
             {/* Login Button */}
@@ -116,22 +118,22 @@ const LoginScreen = ({ navigation }) => {
               disabled={isLoading}
             >
               <Text style={styles.loginButtonText}>
-                {isLoading ? 'Signing In...' : 'Sign In'}
+                {isLoading ? t('auth.login.signingIn') : t('auth.login.signIn')}
               </Text>
             </TouchableOpacity>
 
             {/* Divider */}
             <View style={styles.dividerContainer}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
+              <Text style={styles.dividerText}>{t('auth.login.divider')}</Text>
               <View style={styles.dividerLine} />
             </View>
 
             {/* Sign Up Link */}
             <View style={styles.signUpContainer}>
-              <Text style={styles.signUpText}>Don't have an account? </Text>
+              <Text style={styles.signUpText}>{t('auth.login.noAccount')}</Text>
               <TouchableOpacity onPress={navigateToSignUp}>
-                <Text style={styles.signUpLink}>Sign Up</Text>
+                <Text style={styles.signUpLink}>{t('auth.login.signUp')}</Text>
               </TouchableOpacity>
             </View>
           </View>

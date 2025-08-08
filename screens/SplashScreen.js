@@ -3,26 +3,24 @@
  * Initial splash screen with app logo and vision statement
  */
 import React, { useEffect } from 'react';
-import {
-  View,
-  Text,
-  Image,
-  StyleSheet,
-  Dimensions,
-  StatusBar,
-} from 'react-native';
+import { View, Text, Image, StyleSheet, Dimensions, StatusBar } from 'react-native';
+import { useI18n } from '../i18n/I18nProvider';
 
 const { width, height } = Dimensions.get('window');
 
 const SplashScreen = ({ navigation }) => {
-  useEffect(() => {
-    // Auto-navigate to language selection screen after 3 seconds
-    const timer = setTimeout(() => {
-      navigation.replace('LanguageSelect');
-    }, 1000);
+  const { t, isLoading } = useI18n();
 
-    return () => clearTimeout(timer);
-  }, [navigation]);
+  useEffect(() => {
+    // Only auto-navigate when language loading is complete
+    if (!isLoading) {
+      const timer = setTimeout(() => {
+        navigation.replace('LanguageSelect');
+      }, 1000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [navigation, isLoading]);
 
   return (
     <View style={styles.container}>
@@ -40,16 +38,14 @@ const SplashScreen = ({ navigation }) => {
 
         {/* Vision Statement */}
         <View style={styles.visionContainer}>
-          <Text style={styles.visionTitle}>Empowering Your Business</Text>
-          <Text style={styles.visionSubtitle}>
-            Making business management simple, intuitive, and growth-focused
-          </Text>
+          <Text style={styles.visionTitle}>{t('splash.visionTitle')}</Text>
+          <Text style={styles.visionSubtitle}>{t('splash.visionSubtitle')}</Text>
         </View>
       </View>
 
       {/* Loading indicator or brand name at bottom */}
       <View style={styles.footer}>
-        <Text style={styles.brandText}>BusinessPro</Text>
+        <Text style={styles.brandText}>{t('splash.brand')}</Text>
       </View>
     </View>
   );
