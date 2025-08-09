@@ -1,3 +1,8 @@
+(do not edit this)
+how to run?
+for ollama - adb reverse tcp:11434 tcp:11434
+then - npx react-native run-android 
+
 # KAARO - Business Management App
 
 A comprehensive React Native business management application designed for modern entrepreneurs and small businesses. KAARO provides an intuitive interface for managing all aspects of your business operations.
