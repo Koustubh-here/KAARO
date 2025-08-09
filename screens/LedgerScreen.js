@@ -20,6 +20,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
 import { useAuth } from '../context/AuthContext';
 import { listTransactions, sumTransactions } from '../lib/db';
+import { supabase } from '../lib/supabaseClient';
 import { useFocusEffect } from '@react-navigation/native';
 
 // THEME & DESIGN SYSTEM (Consistent with other screens)
@@ -81,6 +82,19 @@ const LedgerScreen = ({ navigation }) => {
       load();
     }, [load])
   );
+
+  useEffect(() => {
+    if (!business?.id) return;
+    const channel = supabase
+      .channel('ledger_tx')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `business_id=eq.${business.id}` }, () => {
+        load();
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [business?.id, load]);
 
   const { filteredTransactions, totalIncome, totalExpenses } = useMemo(() => {
     let tx = transactions;

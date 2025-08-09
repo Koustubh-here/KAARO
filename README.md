@@ -324,3 +324,8 @@ const { data, error } = await supabase.from('products').select('*').limit(1);
 4. Add optimistic updates & offline queue (later)
 
 ---
+
+
+
+to run it with ollama you may have to 
+adb reverse tcp:11434 tcp:11434

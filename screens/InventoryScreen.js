@@ -23,6 +23,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
 import { useAuth } from '../context/AuthContext';
 import { listProducts } from '../lib/db';
+import { supabase } from '../lib/supabaseClient';
 import { useFocusEffect } from '@react-navigation/native';
 
 // THEME & DESIGN SYSTEM (Consistent with Home.js)
@@ -82,6 +83,19 @@ const InventoryScreen = ({ navigation }) => {
       load();
     }, [load])
   );
+
+  useEffect(() => {
+    if (!business?.id) return;
+    const channel = supabase
+      .channel('inventory_products')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `business_id=eq.${business.id}` }, () => {
+        load();
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [business?.id, load]);
 
   // Memoized filtering for performance
   const filteredProducts = useMemo(() => {

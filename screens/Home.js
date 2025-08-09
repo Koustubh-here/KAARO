@@ -25,7 +25,9 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
 import { useAuth } from '../context/AuthContext';
 import { listTransactions, sumTransactions } from '../lib/db';
+import { supabase } from '../lib/supabaseClient';
 import { useFocusEffect } from '@react-navigation/native';
+import { runAgent } from '../lib/agent/agent';
 
 // THEME & DESIGN SYSTEM =================================================
 const theme = {
@@ -96,7 +98,7 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const Home = ({ navigation }) => {
   const { t } = useI18n();
-  const { signOut, business } = useAuth();
+  const { signOut, business, user } = useAuth();
   const [selectedTab, setSelectedTab] = useState('Home');
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
@@ -141,22 +143,21 @@ const Home = ({ navigation }) => {
     ]).start();
   };
 
-  const sendMessage = () => {
-    if (chatMessage.trim()) {
-      const newMessage = { id: Date.now(), text: chatMessage, isBot: false };
-      const thinkingMessage = { id: Date.now() + 1, text: t('home.chat.typing'), isBot: true };
+  const sendMessage = async () => {
+    if (!chatMessage.trim()) return;
+    const userText = chatMessage.trim();
+    const newMessage = { id: Date.now(), text: userText, isBot: false };
+    const thinkingMessage = { id: Date.now() + 1, text: t('home.chat.typing'), isBot: true };
+    setChatMessages(prev => [...prev, newMessage, thinkingMessage]);
+    setChatMessage('');
 
-      setChatMessages(prev => [...prev, newMessage, thinkingMessage]);
-      setChatMessage('');
-
-      setTimeout(() => {
-         const botResponse = {
-          id: Date.now() + 2,
-           text: "Excellent question. I'm analyzing your real-time data to give you the best possible insights.",
-          isBot: true,
-        };
-        setChatMessages(prev => [...prev.slice(0, -1), botResponse]);
-      }, 1500);
+    try {
+      const { reply } = await runAgent({ user, business, userText });
+      setChatMessages(prev => [...prev.slice(0, -1), { id: Date.now() + 2, text: reply, isBot: true }]);
+      // After tool actions, refresh summaries and activity
+      await load();
+    } catch (e) {
+      setChatMessages(prev => [...prev.slice(0, -1), { id: Date.now() + 2, text: e.message || 'Error', isBot: true }]);
     }
   };
 
@@ -184,6 +185,19 @@ const Home = ({ navigation }) => {
       load();
     }, [load])
   );
+
+  React.useEffect(() => {
+    if (!business?.id) return;
+    const channel = supabase
+      .channel('home_tx')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `business_id=eq.${business.id}` }, () => {
+        load();
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [business?.id, load]);
 
   const sidebarItems = [
     { title: t('home.sidebar.ledger'), route: 'Ledger', icon: 'account-balance-wallet' },
