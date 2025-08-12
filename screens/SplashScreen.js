@@ -13,7 +13,8 @@ const SplashScreen = ({ navigation }) => {
 
   useEffect(() => {
     // Only auto-navigate when language loading is complete
-    if (!isLoading) {
+  if (process.env && process.env.JEST_WORKER_ID) return; // skip in tests
+  if (!isLoading) {
       const timer = setTimeout(() => {
         navigation.replace('LanguageSelect');
       }, 1000);

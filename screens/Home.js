@@ -96,7 +96,7 @@ const theme = {
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-const Home = ({ navigation }) => {
+const Home = ({ navigation, route }) => {
   const { t } = useI18n();
   const { signOut, business, user } = useAuth();
   const [selectedTab, setSelectedTab] = useState('Home');
@@ -106,6 +106,7 @@ const Home = ({ navigation }) => {
   const [chatMessages, setChatMessages] = useState([
     { id: 1, text: t('home.chat.welcome'), isBot: true },
   ]);
+  const [activeConversationId, setActiveConversationId] = useState(null);
 
   const sidebarAnimation = useRef(new Animated.Value(-350)).current;
   const chatAnimation = useRef(new Animated.Value(screenHeight)).current;
@@ -123,7 +124,31 @@ const Home = ({ navigation }) => {
     setSidebarVisible(!sidebarVisible);
   };
 
-  const toggleChat = () => {
+  const loadConversationMessages = async (convId) => {
+    if (!convId) return;
+    const { data } = await supabase
+      .from('ai_messages')
+      .select('id, role, content, created_at')
+      .eq('conversation_id', convId)
+      .order('created_at', { ascending: true });
+    const mapped = (data || []).map(m => ({ id: m.id, text: m.content, isBot: m.role !== 'user' }));
+    setChatMessages(mapped.length ? mapped : [{ id: 1, text: t('home.chat.welcome'), isBot: true }]);
+  };
+
+  const ensureLatestConversation = async () => {
+    if (!user?.id) return null;
+    const { data } = await supabase
+      .from('ai_conversations')
+      .select('id')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data?.id) setActiveConversationId(data.id);
+    return data?.id || null;
+  };
+
+  const toggleChat = async () => {
     const toValue = chatVisible ? screenHeight : 0;
     const fabToValue = chatVisible ? 1 : 0;
     setChatVisible(!chatVisible); // Toggle state optimistically for responsiveness
@@ -141,6 +166,10 @@ const Home = ({ navigation }) => {
         useNativeDriver: true,
       }),
     ]).start();
+    if (!chatVisible) {
+      const convId = await ensureLatestConversation();
+      await loadConversationMessages(convId);
+    }
   };
 
   const sendMessage = async () => {
@@ -152,10 +181,12 @@ const Home = ({ navigation }) => {
     setChatMessage('');
 
     try {
-      const { reply } = await runAgent({ user, business, userText });
+      const { reply } = await runAgent({ user, business, userText, conversationId: activeConversationId });
       setChatMessages(prev => [...prev.slice(0, -1), { id: Date.now() + 2, text: reply, isBot: true }]);
       // After tool actions, refresh summaries and activity
       await load();
+      // refresh messages from DB to stay in sync
+      if (activeConversationId) await loadConversationMessages(activeConversationId);
     } catch (e) {
       setChatMessages(prev => [...prev.slice(0, -1), { id: Date.now() + 2, text: e.message || 'Error', isBot: true }]);
     }
@@ -183,7 +214,17 @@ const Home = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load])
+      // If navigated from ChatHistoryScreen with a selected conversation
+      const openId = route?.params?.openConversationId;
+      if (openId) {
+        setActiveConversationId(openId);
+        setChatVisible(true);
+        Animated.spring(chatAnimation, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }).start();
+        loadConversationMessages(openId);
+        // Clear the param to avoid reopening repeatedly
+        navigation.setParams({ openConversationId: undefined });
+      }
+    }, [load, route?.params?.openConversationId])
   );
 
   React.useEffect(() => {
@@ -328,6 +369,19 @@ const Home = ({ navigation }) => {
     </Animated.View>
   );
 
+  const newChat = async () => {
+    if (!user?.id) return;
+    const { data, error } = await supabase
+      .from('ai_conversations')
+      .insert({ user_id: user.id, business_id: business?.id || null, title: `chat-${new Date().toISOString()}` })
+      .select('id')
+      .single();
+    if (!error && data?.id) {
+      setActiveConversationId(data.id);
+      setChatMessages([{ id: 1, text: t('home.chat.welcome'), isBot: true }]);
+    }
+  };
+
   const renderChat = () => (
     <Animated.View style={[styles.chatContainer, { transform: [{ translateY: chatAnimation }] }]}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -339,7 +393,15 @@ const Home = ({ navigation }) => {
                         <Text style={styles.chatHeaderSubtitle}>{t('home.chat.online')}</Text>
                     </View>
                 </View>
-                <TouchableOpacity onPress={toggleChat}><Icon name="keyboard-arrow-down" size={32} color={theme.colors.white} /></TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <TouchableOpacity onPress={newChat} style={{ marginRight: theme.spacing.md }}>
+                    <Icon name="chat" size={24} color={theme.colors.white} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => navigation.navigate('ChatHistoryScreen')} style={{ marginRight: theme.spacing.md }}>
+                    <Icon name="history" size={24} color={theme.colors.white} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={toggleChat}><Icon name="keyboard-arrow-down" size={32} color={theme.colors.white} /></TouchableOpacity>
+                </View>
             </View>
             <FlatList
                 data={chatMessages}
@@ -382,12 +444,17 @@ const Home = ({ navigation }) => {
           <Icon name="menu" size={28} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('home.headerTitle')}</Text>
-        <TouchableOpacity style={styles.headerButton}>
-          <Icon name="notifications" size={28} color={theme.colors.text} />
-          <View style={styles.notificationBadge}>
-            <Text style={styles.notificationBadgeText}>3</Text>
-          </View>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row' }}>
+          <TouchableOpacity style={styles.headerButton} onPress={() => navigation.navigate('ChatHistoryScreen')}>
+            <Icon name="history" size={28} color={theme.colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerButton}>
+            <Icon name="notifications" size={28} color={theme.colors.text} />
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>3</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>

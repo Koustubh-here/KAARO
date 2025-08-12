@@ -20,6 +20,9 @@ import InventoryScreen from '../screens/InventoryScreen.js';
 import LedgerScreen from '../screens/LedgerScreen.js';
 import CRMScreen from '../screens/CRMScreen.js';
 import ReportsScreen from '../screens/ReportsScreen.js';
+import MemoryScreen from '../screens/MemoryScreen.js';
+import ChatHistoryScreen from '../screens/ChatHistoryScreen.js';
+import ProfileScreen from '../screens/ProfileScreen.js';
 import AddTransactionScreen from '../screens/AddTransactionScreen.js';
 import ProductDetailsScreen from '../screens/ProductDetailsScreen.js';
 import AddProductScreen from '../screens/AddProductScreen.js';
@@ -104,6 +107,21 @@ const AppNavigator = () => {
             <Stack.Screen 
               name="ReportsScreen" 
               component={ReportsScreen}
+              options={{ gestureEnabled: true }}
+            />
+            <Stack.Screen 
+              name="ProfileScreen" 
+              component={ProfileScreen}
+              options={{ gestureEnabled: true }}
+            />
+            <Stack.Screen 
+              name="MemoryScreen" 
+              component={MemoryScreen}
+              options={{ gestureEnabled: true }}
+            />
+            <Stack.Screen 
+              name="ChatHistoryScreen" 
+              component={ChatHistoryScreen}
               options={{ gestureEnabled: true }}
             />
             <Stack.Screen 

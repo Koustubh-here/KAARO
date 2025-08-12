@@ -17,7 +17,9 @@ function App() {
 
   useEffect(() => {
     // Simple connectivity check
-    (async () => {
+  // Skip during Jest tests to avoid logging after teardown
+  if (process.env && process.env.JEST_WORKER_ID) return;
+  (async () => {
       try {
         const { data, error } = await supabase.from('health_check').select('id').limit(1);
         if (error) {
