@@ -107,20 +107,62 @@ const Home = ({ navigation, route }) => {
     { id: 1, text: t('home.chat.welcome'), isBot: true },
   ]);
   const [activeConversationId, setActiveConversationId] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
 
   const sidebarAnimation = useRef(new Animated.Value(-350)).current;
   const chatAnimation = useRef(new Animated.Value(screenHeight)).current;
   const fabAnimation = useRef(new Animated.Value(1)).current;
 
+  // Load user profile data
+  const loadUserProfile = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('name, business_name, location')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (!error && data) {
+        setUserProfile(data);
+      }
+    } catch (error) {
+      console.log('Error loading user profile:', error);
+    }
+  }, [user?.id]);
+
+  // Get user initials
+  const getUserInitials = () => {
+    if (userProfile?.name) {
+      const names = userProfile.name.trim().split(' ');
+      if (names.length >= 2) {
+        return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+      } else if (names.length === 1) {
+        return names[0].substring(0, 2).toUpperCase();
+      }
+    }
+    return user?.email?.substring(0, 2).toUpperCase() || 'U';
+  };
+
   // ANIMATION LOGIC (Refined for a smoother feel)
   const toggleSidebar = () => {
     const toValue = sidebarVisible ? -350 : 0;
-    Animated.spring(sidebarAnimation, {
-      toValue,
-      useNativeDriver: true,
-      tension: 60,
-      friction: 10,
-    }).start();
+    const fabToValue = sidebarVisible ? 1 : 0; // Hide FAB when sidebar opens
+    
+    Animated.parallel([
+      Animated.spring(sidebarAnimation, {
+        toValue,
+        useNativeDriver: true,
+        tension: 60,
+        friction: 10,
+      }),
+      Animated.timing(fabAnimation, {
+        toValue: fabToValue,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
     setSidebarVisible(!sidebarVisible);
   };
 
@@ -213,7 +255,9 @@ const Home = ({ navigation, route }) => {
 
   useFocusEffect(
     useCallback(() => {
+      setSelectedTab('Home');
       load();
+      loadUserProfile();
       // If navigated from ChatHistoryScreen with a selected conversation
       const openId = route?.params?.openConversationId;
       if (openId) {
@@ -224,7 +268,7 @@ const Home = ({ navigation, route }) => {
         // Clear the param to avoid reopening repeatedly
         navigation.setParams({ openConversationId: undefined });
       }
-    }, [load, route?.params?.openConversationId])
+    }, [load, loadUserProfile, route?.params?.openConversationId])
   );
 
   React.useEffect(() => {
@@ -312,15 +356,42 @@ const Home = ({ navigation, route }) => {
     </View>
   );
 
+  const handleSidebarNavigation = (item) => {
+  if (item.route) {
+    // Navigate immediately, don't wait for animation
+    navigation.navigate(`${item.route}Screen`);
+    
+    // Then close sidebar
+    setSidebarVisible(false);
+    Animated.parallel([
+      Animated.spring(sidebarAnimation, {
+        toValue: -350,
+        useNativeDriver: true,
+        tension: 60,
+        friction: 10,
+      }),
+      Animated.timing(fabAnimation, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }
+};
+
   const renderSidebar = () => (
     <Animated.View style={[styles.sidebar, { transform: [{ translateX: sidebarAnimation }] }]}>
       <View style={styles.sidebarHeader}>
         <View style={styles.profileAvatar}>
-          <Text style={styles.profileInitial}>JD</Text>
+          <Text style={styles.profileInitial}>{getUserInitials()}</Text>
         </View>
-        <View>
-          <Text style={styles.profileName}>John Doe</Text>
-          <Text style={styles.profileEmail}>john@business.com</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.profileName}>
+            {userProfile?.name || business?.name || 'User'}
+          </Text>
+          <Text style={styles.profileEmail}>
+            {user?.email || 'user@business.com'}
+          </Text>
         </View>
         <TouchableOpacity onPress={toggleSidebar} style={styles.sidebarClose}>
           <Icon name="close" size={24} color={theme.colors.subtleText} />
@@ -331,12 +402,8 @@ const Home = ({ navigation, route }) => {
           <TouchableOpacity 
             key={item.title} 
             style={styles.sidebarItem}
-            onPress={() => {
-              if (item.route) {
-                navigation.navigate(`${item.route}Screen`);
-                setSidebarVisible(false);
-              }
-            }}
+            onPress={() => handleSidebarNavigation(item)}
+            activeOpacity={0.7}
           >
             <Icon name={item.icon} size={24} color={theme.colors.subtleText} />
             <Text style={styles.sidebarItemText}>{item.title}</Text>
@@ -410,7 +477,7 @@ const Home = ({ navigation, route }) => {
                 contentContainerStyle={{ paddingVertical: theme.spacing.md }}
                 renderItem={({ item }) => (
                     <View style={[styles.messageContainer, item.isBot ? styles.botMessage : styles.userMessage]}>
-                        <Text style={styles.messageText}>{item.text}</Text>
+                        <Text style={[styles.messageText, item.isBot ? {} : { color: theme.colors.white }]}>{item.text}</Text>
                     </View>
                 )}
             />
@@ -459,7 +526,9 @@ const Home = ({ navigation, route }) => {
 
       <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
-          <Text style={theme.typography.h1}>{t('home.greeting')}</Text>
+          <Text style={theme.typography.h1}>
+            Good Morning {business?.name?.trim().split(' ')[0] || 'User'}!
+          </Text>
           <Text style={theme.typography.body}>{t('home.overview')}</Text>
         </View>
 
@@ -475,7 +544,7 @@ const Home = ({ navigation, route }) => {
             <Text style={styles.summaryValue}>₹{Number(summary.income).toLocaleString('en-IN')}</Text>
             <Text style={styles.summaryLabel}>{t('home.todaysSales')}</Text>
           </View>
-          <View style={[styles.summaryCard, theme.shadow]}>
+          <View style={[styles.summaryCard, theme.shadow, { marginLeft: theme.spacing.md }]}>
              <View style={styles.summaryHeader}>
                 <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.danger}20`}]}>
                     <Icon name="trending-down" size={24} color={theme.colors.danger} />
@@ -567,7 +636,7 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.md,
   },
   headerButton: { padding: theme.spacing.sm },
-  headerTitle: { fontFamily: 'Poppins-Bold', fontSize: 24, color: theme.colors.primary },
+  headerTitle: { fontFamily: 'Poppins-Bold', fontSize: 24, color: theme.colors.primary,marginLeft: 40, },
   notificationBadge: {
     position: 'absolute',
     top: 4,
@@ -589,7 +658,6 @@ const styles = StyleSheet.create({
   // Summary
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: theme.spacing.lg, marginBottom: theme.spacing.xl },
   summaryCard: { flex: 1, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, padding: theme.spacing.lg },
-  summaryCard_margin: { marginLeft: theme.spacing.md },
   summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm },
   summaryIconContainer: { width: 44, height: 44, borderRadius: theme.borderRadius.full, justifyContent: 'center', alignItems: 'center' },
   summaryValue: { ...theme.typography.h1, fontSize: 24, marginVertical: theme.spacing.xs },
