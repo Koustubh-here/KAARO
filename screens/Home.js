@@ -24,10 +24,11 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
 import { useAuth } from '../context/AuthContext';
-import { listTransactions, sumTransactions } from '../lib/db';
 import { supabase } from '../lib/supabaseClient';
 import { useFocusEffect } from '@react-navigation/native';
 import { runAgent } from '../lib/agent/agent';
+// ADDED: Import AsyncStorage to sync notification state
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // THEME & DESIGN SYSTEM =================================================
 const theme = {
@@ -108,10 +109,13 @@ const Home = ({ navigation, route }) => {
   ]);
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
+  const [summaryIndex, setSummaryIndex] = useState(0); // 0: Today, 1: Overall
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   const sidebarAnimation = useRef(new Animated.Value(-350)).current;
   const chatAnimation = useRef(new Animated.Value(screenHeight)).current;
   const fabAnimation = useRef(new Animated.Value(1)).current;
+  const summaryScrollX = useRef(new Animated.Value(0)).current;
 
   // Load user profile data
   const loadUserProfile = useCallback(async () => {
@@ -131,6 +135,44 @@ const Home = ({ navigation, route }) => {
     }
   }, [user?.id]);
 
+  // CHANGED: Load notification count respecting cleared/read status from AsyncStorage
+  const loadNotificationCount = useCallback(async () => {
+    if (!business?.id) return;
+    try {
+      // 1. Get potential notifications (e.g., low stock items)
+      const { data: lowStockProducts, error } = await supabase
+        .from('products')
+        .select('id')
+        .eq('business_id', business.id)
+        .lt('quantity', 20);
+      
+      if (error || !lowStockProducts) {
+        setUnreadNotificationCount(0);
+        return;
+      }
+
+      // 2. Get the lists of cleared and read notifications from local storage
+      const clearedIdsString = await AsyncStorage.getItem(`cleared_notifications_${business.id}`);
+      const clearedIds = clearedIdsString ? new Set(JSON.parse(clearedIdsString)) : new Set();
+      
+      const readIdsString = await AsyncStorage.getItem(`read_notifications_${business.id}`);
+      const readIds = readIdsString ? new Set(JSON.parse(readIdsString)) : new Set();
+      
+      // 3. Filter the potential notifications to find the truly unread count
+      const unreadCount = lowStockProducts.filter(product => {
+        const notificationId = `low_stock_${product.id}`;
+        // A notification is unread if it's NOT cleared AND NOT read
+        return !clearedIds.has(notificationId) && !readIds.has(notificationId);
+      }).length;
+      
+      setUnreadNotificationCount(unreadCount);
+
+    } catch (err) {
+      console.log('Error loading notification count:', err);
+      setUnreadNotificationCount(0); // Default to 0 on error
+    }
+  }, [business?.id]);
+
   // Get user initials
   const getUserInitials = () => {
     if (userProfile?.name) {
@@ -142,6 +184,14 @@ const Home = ({ navigation, route }) => {
       }
     }
     return user?.email?.substring(0, 2).toUpperCase() || 'U';
+  };
+
+  // Calculate percentage change from previous day
+  const calculatePercentageChange = (current, previous) => {
+    if (!previous || previous === 0) {
+      return current > 0 ? 100 : 0; // If no previous data but current exists, show 100% increase
+    }
+    return ((current - previous) / previous) * 100;
   };
 
   // ANIMATION LOGIC (Refined for a smoother feel)
@@ -235,22 +285,97 @@ const Home = ({ navigation, route }) => {
   };
 
   const [activityData, setActivityData] = useState([]);
-  const [summary, setSummary] = useState({ income: 0, expenses: 0 });
+  const [summary, setSummary] = useState({ 
+    todayIncome: 0, 
+    todayExpenses: 0,
+    overallIncome: 0,
+    overallExpenses: 0,
+    yesterdayIncome: 0,
+    yesterdayExpenses: 0,
+    prevTotalIncome: 0,
+    prevTotalExpenses: 0,
+  });
 
   const load = useCallback(async () => {
     if (!business?.id) return;
-    const { data: tx } = await listTransactions(business.id);
-    const { data: sums } = await sumTransactions(business.id);
-    const recent = (tx || []).slice(0, 5).map(t => ({
-      type: (t.type || '').toLowerCase(),
-      title: t.description,
-      time: new Date(t.date || t.created_at).toDateString(),
-      amount: `${(t.type || '').toLowerCase() === 'income' ? '+ ' : '- '}₹${Number(t.amount || 0).toLocaleString('en-IN')}`,
-      icon: (t.type || '').toLowerCase() === 'income' ? 'trending-up' : 'trending-down',
-      color: (t.type || '').toLowerCase() === 'income' ? theme.colors.success : theme.colors.danger,
-    }));
+    
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
+    // Get today's transactions
+    const { data: todayTx } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('business_id', business.id)
+      .eq('date', today);
+    
+    // Get yesterday's transactions
+    const { data: yesterdayTx } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('business_id', business.id)
+      .eq('date', yesterday);
+    
+    // Get all transactions
+    const { data: allTx } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('business_id', business.id)
+      .order('created_at', { ascending: false });
+    
+    // Get previous period transactions (for overall comparison)
+    const { data: prevTx } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('business_id', business.id)
+      .lt('date', lastWeek);
+
+    const todayIncome = (todayTx || []).filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
+    const todayExpenses = (todayTx || []).filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
+    
+    const yesterdayIncome = (yesterdayTx || []).filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
+    const yesterdayExpenses = (yesterdayTx || []).filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
+    
+    const overallIncome = (allTx || []).filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
+    const overallExpenses = (allTx || []).filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
+    
+    const prevTotalIncome = (prevTx || []).filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
+    const prevTotalExpenses = (prevTx || []).filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
+
+    // Create activity data from recent transactions with proper formatting
+    const recent = (allTx || []).slice(0, 10).map(t => {
+      const transactionDate = new Date(t.date || t.created_at);
+      const formattedDate = transactionDate.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+      
+      return {
+        id: t.id,
+        type: (t.type || '').toLowerCase(),
+        title: t.description || `${t.type === 'income' ? 'Sale' : 'Expense'} Transaction`,
+        category: t.category || 'General',
+        time: formattedDate,
+        amount: `${(t.type || '').toLowerCase() === 'income' ? '+ ' : '- '}₹${Number(t.amount || 0).toLocaleString('en-IN')}`,
+        icon: (t.type || '').toLowerCase() === 'income' ? 'trending-up' : 'trending-down',
+        color: (t.type || '').toLowerCase() === 'income' ? theme.colors.success : theme.colors.danger,
+        rawAmount: Number(t.amount || 0),
+      };
+    });
+    
     setActivityData(recent);
-    setSummary({ income: sums?.income || 0, expenses: sums?.expenses || 0 });
+    setSummary({ 
+      todayIncome, 
+      todayExpenses,
+      overallIncome,
+      overallExpenses,
+      yesterdayIncome,
+      yesterdayExpenses,
+      prevTotalIncome,
+      prevTotalExpenses,
+    });
   }, [business?.id]);
 
   useFocusEffect(
@@ -258,6 +383,7 @@ const Home = ({ navigation, route }) => {
       setSelectedTab('Home');
       load();
       loadUserProfile();
+      loadNotificationCount();
       // If navigated from ChatHistoryScreen with a selected conversation
       const openId = route?.params?.openConversationId;
       if (openId) {
@@ -268,7 +394,7 @@ const Home = ({ navigation, route }) => {
         // Clear the param to avoid reopening repeatedly
         navigation.setParams({ openConversationId: undefined });
       }
-    }, [load, loadUserProfile, route?.params?.openConversationId])
+    }, [load, loadUserProfile, loadNotificationCount, route?.params?.openConversationId])
   );
 
   React.useEffect(() => {
@@ -278,11 +404,14 @@ const Home = ({ navigation, route }) => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `business_id=eq.${business.id}` }, () => {
         load();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `business_id=eq.${business.id}` }, () => {
+        loadNotificationCount();
+      })
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [business?.id, load]);
+  }, [business?.id, load, loadNotificationCount]);
 
   const sidebarItems = [
     { title: t('home.sidebar.ledger'), route: 'Ledger', icon: 'account-balance-wallet' },
@@ -344,7 +473,10 @@ const Home = ({ navigation, route }) => {
       </View>
       <View style={styles.activityContent}>
         <Text style={styles.activityTitle}>{item.title}</Text>
-        <Text style={styles.activityTime}>{item.time}</Text>
+        <View style={styles.activityMeta}>
+          <Text style={styles.activityCategory}>{item.category}</Text>
+          <Text style={styles.activityTime}>{item.time}</Text>
+        </View>
       </View>
       {item.amount ? (
         <Text style={[styles.activityAmount, { color: item.amount.startsWith('+') ? theme.colors.success : theme.colors.danger }]}>
@@ -357,27 +489,27 @@ const Home = ({ navigation, route }) => {
   );
 
   const handleSidebarNavigation = (item) => {
-  if (item.route) {
-    // Navigate immediately, don't wait for animation
-    navigation.navigate(`${item.route}Screen`);
-    
-    // Then close sidebar
-    setSidebarVisible(false);
-    Animated.parallel([
-      Animated.spring(sidebarAnimation, {
-        toValue: -350,
-        useNativeDriver: true,
-        tension: 60,
-        friction: 10,
-      }),
-      Animated.timing(fabAnimation, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }
-};
+    if (item.route) {
+      // Navigate immediately, don't wait for animation
+      navigation.navigate(`${item.route}Screen`);
+      
+      // Then close sidebar
+      setSidebarVisible(false);
+      Animated.parallel([
+        Animated.spring(sidebarAnimation, {
+          toValue: -350,
+          useNativeDriver: true,
+          tension: 60,
+          friction: 10,
+        }),
+        Animated.timing(fabAnimation, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  };
 
   const renderSidebar = () => (
     <Animated.View style={[styles.sidebar, { transform: [{ translateX: sidebarAnimation }] }]}>
@@ -464,9 +596,6 @@ const Home = ({ navigation, route }) => {
                   <TouchableOpacity onPress={newChat} style={{ marginRight: theme.spacing.md }}>
                     <Icon name="chat" size={24} color={theme.colors.white} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => navigation.navigate('ChatHistoryScreen')} style={{ marginRight: theme.spacing.md }}>
-                    <Icon name="history" size={24} color={theme.colors.white} />
-                  </TouchableOpacity>
                   <TouchableOpacity onPress={toggleChat}><Icon name="keyboard-arrow-down" size={32} color={theme.colors.white} /></TouchableOpacity>
                 </View>
             </View>
@@ -498,6 +627,130 @@ const Home = ({ navigation, route }) => {
     </Animated.View>
   );
 
+  const renderSummaryCards = () => {
+    const isToday = summaryIndex === 0;
+    const currentIncome = isToday ? summary.todayIncome : summary.overallIncome;
+    const currentExpenses = isToday ? summary.todayExpenses : summary.overallExpenses;
+    const previousIncome = isToday ? summary.yesterdayIncome : summary.prevTotalIncome;
+    const previousExpenses = isToday ? summary.yesterdayExpenses : summary.prevTotalExpenses;
+    
+    const incomeChange = calculatePercentageChange(currentIncome, previousIncome);
+    const expenseChange = calculatePercentageChange(currentExpenses, previousExpenses);
+    
+    return (
+      <View style={styles.summaryContainer}>
+        <ScrollView 
+          horizontal 
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: summaryScrollX } } }],
+            { 
+              useNativeDriver: false,
+              listener: (event) => {
+                const index = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
+                setSummaryIndex(index);
+              }
+            }
+          )}
+          scrollEventThrottle={16}
+        >
+          {/* Today's Summary */}
+          <View style={[styles.summaryPage, { width: screenWidth }]}>
+            <View style={styles.summaryRow}>
+              <View style={[styles.summaryCard, theme.shadow]}>
+                <View style={styles.summaryHeader}>
+                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.success}20`}]}>
+                    <Icon name="trending-up" size={24} color={theme.colors.success} />
+                  </View>
+                  <Text style={[styles.summaryGrowth, { color: incomeChange >= 0 ? theme.colors.success : theme.colors.danger }]}>
+                    {incomeChange >= 0 ? '+' : ''}{incomeChange.toFixed(1)}%
+                  </Text>
+                </View>
+                <Text style={styles.summaryValue}>₹{Number(summary.todayIncome).toLocaleString('en-IN')}</Text>
+                <Text style={styles.summaryLabel}>{t('home.todaysSales')}</Text>
+                {/* REMOVED: Comparison text to ensure consistent card size */}
+              </View>
+              <View style={[styles.summaryCard, theme.shadow, { marginLeft: theme.spacing.md }]}>
+                <View style={styles.summaryHeader}>
+                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.danger}20`}]}>
+                    <Icon name="trending-down" size={24} color={theme.colors.danger} />
+                  </View>
+                  <Text style={[styles.summaryGrowth, { color: expenseChange <= 0 ? theme.colors.success : theme.colors.danger }]}>
+                    {expenseChange >= 0 ? '+' : ''}{expenseChange.toFixed(1)}%
+                  </Text>
+                </View>
+                <Text style={styles.summaryValue}>₹{Number(summary.todayExpenses).toLocaleString('en-IN')}</Text>
+                <Text style={styles.summaryLabel}>{t('home.todaysExpenses')}</Text>
+                {/* REMOVED: Comparison text to ensure consistent card size */}
+              </View>
+            </View>
+          </View>
+
+          {/* Overall Summary */}
+          <View style={[styles.summaryPage, { width: screenWidth }]}>
+            <View style={styles.summaryRow}>
+              <View style={[styles.summaryCard, theme.shadow]}>
+                <View style={styles.summaryHeader}>
+                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.success}20`}]}>
+                    <Icon name="trending-up" size={24} color={theme.colors.success} />
+                  </View>
+                  <Text style={[styles.summaryGrowth, { color: incomeChange >= 0 ? theme.colors.success : theme.colors.danger }]}>
+                    {incomeChange >= 0 ? '+' : ''}{incomeChange.toFixed(1)}%
+                  </Text>
+                </View>
+                <Text style={styles.summaryValue}>₹{Number(summary.overallIncome).toLocaleString('en-IN')}</Text>
+                <Text style={styles.summaryLabel}>Overall Sales</Text>
+                 {/* REMOVED: Comparison text to ensure consistent card size */}
+              </View>
+              <View style={[styles.summaryCard, theme.shadow, { marginLeft: theme.spacing.md }]}>
+                <View style={styles.summaryHeader}>
+                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.danger}20`}]}>
+                    <Icon name="trending-down" size={24} color={theme.colors.danger} />
+                  </View>
+                  <Text style={[styles.summaryGrowth, { color: expenseChange <= 0 ? theme.colors.success : theme.colors.danger }]}>
+                    {expenseChange >= 0 ? '+' : ''}{expenseChange.toFixed(1)}%
+                  </Text>
+                </View>
+                <Text style={styles.summaryValue}>₹{Number(summary.overallExpenses).toLocaleString('en-IN')}</Text>
+                <Text style={styles.summaryLabel}>Overall Expenses</Text>
+                 {/* REMOVED: Comparison text to ensure consistent card size */}
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+        
+        {/* Page Indicators */}
+        <View style={styles.summaryIndicators}>
+          <Animated.View 
+            style={[
+              styles.summaryIndicator, 
+              { 
+                opacity: summaryScrollX.interpolate({
+                  inputRange: [0, screenWidth],
+                  outputRange: [1, 0.3],
+                  extrapolate: 'clamp',
+                })
+              }
+            ]} 
+          />
+          <Animated.View 
+            style={[
+              styles.summaryIndicator, 
+              { 
+                opacity: summaryScrollX.interpolate({
+                  inputRange: [0, screenWidth],
+                  outputRange: [0.3, 1],
+                  extrapolate: 'clamp',
+                })
+              }
+            ]} 
+          />
+        </View>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
@@ -512,14 +765,16 @@ const Home = ({ navigation, route }) => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('home.headerTitle')}</Text>
         <View style={{ flexDirection: 'row' }}>
-          <TouchableOpacity style={styles.headerButton} onPress={() => navigation.navigate('ChatHistoryScreen')}>
-            <Icon name="history" size={28} color={theme.colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton}>
+          <TouchableOpacity 
+            style={styles.headerButton} 
+            onPress={() => navigation.navigate('NotificationScreen')}
+          >
             <Icon name="notifications" size={28} color={theme.colors.text} />
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>3</Text>
-            </View>
+            {unreadNotificationCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>{unreadNotificationCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -533,28 +788,7 @@ const Home = ({ navigation, route }) => {
         </View>
 
         {/* SUMMARY CARDS */}
-        <View style={styles.summaryRow}>
-          <View style={[styles.summaryCard, theme.shadow]}>
-            <View style={styles.summaryHeader}>
-                <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.success}20`}]}>
-                    <Icon name="trending-up" size={24} color={theme.colors.success} />
-                </View>
-                <Text style={styles.summaryGrowthPositive}>+15.2%</Text>
-            </View>
-            <Text style={styles.summaryValue}>₹{Number(summary.income).toLocaleString('en-IN')}</Text>
-            <Text style={styles.summaryLabel}>{t('home.todaysSales')}</Text>
-          </View>
-          <View style={[styles.summaryCard, theme.shadow, { marginLeft: theme.spacing.md }]}>
-             <View style={styles.summaryHeader}>
-                <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.danger}20`}]}>
-                    <Icon name="trending-down" size={24} color={theme.colors.danger} />
-                </View>
-                <Text style={styles.summaryGrowthNegative}>-8.5%</Text>
-            </View>
-            <Text style={styles.summaryValue}>₹{Number(summary.expenses).toLocaleString('en-IN')}</Text>
-            <Text style={styles.summaryLabel}>{t('home.todaysExpenses')}</Text>
-          </View>
-        </View>
+        {renderSummaryCards()}
 
         {/* QUICK ACTIONS */}
         <View style={styles.section}>
@@ -578,15 +812,28 @@ const Home = ({ navigation, route }) => {
         
         {/* ACTIVITY FEED */}
         <View style={styles.section}>
-          <Text style={theme.typography.h2}>{t('home.activityFeed')}</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={theme.typography.h2}>{t('home.activityFeed')}</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('LedgerScreen')}>
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
           <View style={[styles.card, { paddingVertical: theme.spacing.sm }]}>
-            <FlatList
-              data={activityData}
-              keyExtractor={(item, index) => `${item.type}-${index}`}
-              renderItem={renderActivityItem}
-              ItemSeparatorComponent={() => <View style={styles.divider} />}
-              scrollEnabled={false}
-            />
+            {activityData.length > 0 ? (
+              <FlatList
+                data={activityData}
+                keyExtractor={(item) => item.id}
+                renderItem={renderActivityItem}
+                ItemSeparatorComponent={() => <View style={styles.divider} />}
+                scrollEnabled={false}
+              />
+            ) : (
+              <View style={styles.emptyState}>
+                <Icon name="assessment" size={48} color={theme.colors.subtleText} />
+                <Text style={styles.emptyStateText}>No recent activity</Text>
+                <Text style={styles.emptyStateSubtext}>Start by adding your first transaction</Text>
+              </View>
+            )}
           </View>
         </View>
         
@@ -636,34 +883,67 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.md,
   },
   headerButton: { padding: theme.spacing.sm },
-  headerTitle: { fontFamily: 'Poppins-Bold', fontSize: 24, color: theme.colors.primary,marginLeft: 40, },
+  headerTitle: { fontFamily: 'Poppins-Bold', fontSize: 24, color: theme.colors.primary, marginLeft: 0 },
   notificationBadge: {
     position: 'absolute',
     top: 4,
     right: 4,
     backgroundColor: theme.colors.danger,
-    width: 20,
+    minWidth: 20,
     height: 20,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: theme.colors.background,
+    paddingHorizontal: 4,
   },
   notificationBadgeText: { color: theme.colors.white, fontSize: 10, fontFamily: 'Poppins-Bold' },
   mainContent: { flex: 1 },
   section: { paddingHorizontal: theme.spacing.lg, marginBottom: theme.spacing.xl },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  viewAllText: {
+    ...theme.typography.label,
+    color: theme.colors.primary,
+    fontFamily: 'Poppins-SemiBold',
+  },
   card: { backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, padding: theme.spacing.lg, ...theme.shadow },
 
   // Summary
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: theme.spacing.lg, marginBottom: theme.spacing.xl },
-  summaryCard: { flex: 1, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, padding: theme.spacing.lg },
+  summaryContainer: { marginBottom: theme.spacing.xl, },
+  summaryPage: { paddingHorizontal: theme.spacing.lg },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between',marginBottom: theme.spacing.md },
+  summaryCard: { flex: 1, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, padding: theme.spacing.lg,height: 175 },
   summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm },
   summaryIconContainer: { width: 44, height: 44, borderRadius: theme.borderRadius.full, justifyContent: 'center', alignItems: 'center' },
   summaryValue: { ...theme.typography.h1, fontSize: 24, marginVertical: theme.spacing.xs },
   summaryLabel: { ...theme.typography.subtext },
-  summaryGrowthPositive: { ...theme.typography.label, color: theme.colors.success },
-  summaryGrowthNegative: { ...theme.typography.label, color: theme.colors.danger },
+  summaryGrowth: { ...theme.typography.label, fontFamily: 'Poppins-SemiBold' },
+  // REMOVED: summaryCompareText style is no longer needed but kept here for reference if you want to add it back.
+  summaryCompareText: { 
+    ...theme.typography.label, 
+    fontSize: 10, 
+    color: theme.colors.subtleText, 
+    marginTop: theme.spacing.xs 
+  },
+  summaryIndicators: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginTop: theme.spacing.md, 
+    gap: theme.spacing.sm 
+  },
+  summaryIndicator: { 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4, 
+    backgroundColor: theme.colors.primary 
+  },
   
   // Quick Actions
   quickActionsRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: theme.spacing.md },
@@ -676,9 +956,35 @@ const styles = StyleSheet.create({
   activityIconContainer: { width: 40, height: 40, borderRadius: theme.borderRadius.full, justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
   activityContent: { flex: 1 },
   activityTitle: { ...theme.typography.body, color: theme.colors.text, fontSize: 15, fontFamily: 'Poppins-Medium' },
-  activityTime: { ...theme.typography.subtext, fontSize: 13 },
+  activityMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  activityCategory: { 
+    ...theme.typography.label, 
+    fontSize: 11, 
+    color: theme.colors.primary,
+    backgroundColor: `${theme.colors.primary}15`,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: theme.spacing.sm,
+  },
+  activityTime: { ...theme.typography.subtext, fontSize: 11 },
   activityAmount: { fontFamily: 'Poppins-SemiBold', fontSize: 15 },
   divider: { height: 1, backgroundColor: theme.colors.border, marginHorizontal: theme.spacing.lg },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xl,
+  },
+  emptyStateText: {
+    ...theme.typography.body,
+    color: theme.colors.text,
+    marginTop: theme.spacing.md,
+    fontFamily: 'Poppins-Medium',
+  },
+  emptyStateSubtext: {
+    ...theme.typography.subtext,
+    textAlign: 'center',
+    marginTop: theme.spacing.xs,
+  },
 
   // FAB
   fabContainer: { position: 'absolute', bottom: 100, right: theme.spacing.lg, zIndex: 1000 },
@@ -782,7 +1088,6 @@ const styles = StyleSheet.create({
       marginRight: theme.spacing.md,
   },
   chatSendButton: { width: 48, height: 48, borderRadius: theme.borderRadius.full, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' },
-
 });
 
 export default Home;

@@ -5,7 +5,7 @@
  * Adheres to the KAARO design system for a cohesive app experience.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,9 +19,13 @@ import {
   Modal,
   ScrollView,
   Alert,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
+import { supabase } from '../lib/supabaseClient'; // Assuming you have supabase client
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // THEME & DESIGN SYSTEM (Consistent with other screens)
 const theme = {
@@ -57,84 +61,384 @@ const theme = {
   },
 };
 
-// MOCK DATA
-const ALL_CUSTOMERS = [
-  { id: '1', name: 'Rohan Sharma', lastPurchase: '2025-08-05', totalSpend: 12500, phone: '9876543210', email: 'rohan.s@example.com' },
-  { id: '2', name: 'Priya Patel', lastPurchase: '2025-08-04', totalSpend: 8200, phone: '9876543211', email: 'priya.p@example.com' },
-  { id: '3', name: 'Amit Singh', lastPurchase: '2025-08-01', totalSpend: 25000, phone: '9876543212', email: 'amit.s@example.com' },
-  { id: '4', name: 'Sneha Reddy', lastPurchase: '2025-07-28', totalSpend: 5500, phone: '9876543213', email: 'sneha.r@example.com' },
-  { id: '5', name: 'Vikram Kumar', lastPurchase: '2025-07-25', totalSpend: 18000, phone: '9876543214', email: 'vikram.k@example.com' },
-  { id: '6', name: 'Anjali Desai', lastPurchase: '2025-07-19', totalSpend: 9800, phone: '9876543215', email: 'anjali.d@example.com' },
-];
-
 const CAMPAIGN_CHANNELS = [
   { key: 'sms', name: 'SMS', icon: 'sms' },
   { key: 'email', name: 'Email', icon: 'email' },
-  { key: 'whatsapp', name: 'message', icon: 'message' }, // Using message icon for whatsapp
+  { key: 'whatsapp', name: 'WhatsApp', icon: 'message' },
 ];
 
 const CRMScreen = ({ navigation }) => {
   const { t } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
   const [isCampaignModalVisible, setCampaignModalVisible] = useState(false);
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [businessId, setBusinessId] = useState(null);
+  const [sendingCampaign, setSendingCampaign] = useState(false);
 
   // Campaign State
   const [campaignChannel, setCampaignChannel] = useState('sms');
   const [campaignAudience, setCampaignAudience] = useState('all');
   const [campaignMessage, setCampaignMessage] = useState('');
 
-  const filteredCustomers = useMemo(() => {
-    if (!searchQuery) return ALL_CUSTOMERS;
-    const lowercasedQuery = searchQuery.toLowerCase();
-    return ALL_CUSTOMERS.filter(c => c.name.toLowerCase().includes(lowercasedQuery));
-  }, [searchQuery]);
+  // Get business ID and load customers
+  useEffect(() => {
+    loadBusinessData();
+  }, []);
 
-  const handleStartCampaign = () => {
+  const loadBusinessData = async () => {
+    try {
+      setLoading(true);
+      
+      // Get user from auth
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Error', 'Please log in to access CRM');
+        navigation.goBack();
+        return;
+      }
+
+      // Get user's business
+      const { data: business, error: businessError } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('owner_user', user.id)
+        .single();
+
+      if (businessError || !business) {
+        Alert.alert('Error', 'No business found. Please set up your business first.');
+        navigation.goBack();
+        return;
+      }
+
+      setBusinessId(business.id);
+      
+      // Load customers for this business
+      await loadCustomers(business.id);
+    } catch (error) {
+      console.error('Error loading business data:', error);
+      Alert.alert('Error', 'Failed to load business data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadCustomers = async (bizId) => {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('business_id', bizId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCustomers(data || []);
+    } catch (error) {
+      console.error('Error loading customers:', error);
+      Alert.alert('Error', 'Failed to load customers');
+    }
+  };
+
+  const filteredCustomers = useMemo(() => {
+    if (!searchQuery) return customers;
+    const lowercasedQuery = searchQuery.toLowerCase();
+    return customers.filter(c => 
+      c.name.toLowerCase().includes(lowercasedQuery) ||
+      (c.phone && c.phone.includes(searchQuery)) ||
+      (c.email && c.email.toLowerCase().includes(lowercasedQuery))
+    );
+  }, [searchQuery, customers]);
+
+  const sendSMS = async (phone, message) => {
+    try {
+      // For SMS, we can use the device's SMS capability
+      const url = `sms:${phone}?body=${encodeURIComponent(message)}`;
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+        return true;
+      } else {
+        throw new Error('SMS not supported on this device');
+      }
+    } catch (error) {
+      console.error('SMS Error:', error);
+      return false;
+    }
+  };
+
+  const sendBulkEmail = async (emails, message, subject = 'Campaign Message') => {
+    try {
+      // Create comma-separated email list for BCC to protect customer privacy
+      const emailList = emails.join(',');
+      
+      // Use BCC to send to all customers at once while protecting their privacy
+      const url = `mailto:?bcc=${encodeURIComponent(emailList)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+      
+      // Try to open email client
+      await Linking.openURL(url);
+      return true;
+    } catch (error) {
+      console.error('Email Error:', error);
+      
+      // If mailto fails, try Gmail web with BCC
+      try {
+        const emailList = emails.join(',');
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&bcc=${encodeURIComponent(emailList)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+        await Linking.openURL(gmailUrl);
+        return true;
+      } catch (gmailError) {
+        console.error('Gmail fallback failed:', gmailError);
+        Alert.alert(
+          'Email Setup Required',
+          'Please set up an email app on your device or use the web browser to send emails.',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+    }
+  };
+
+  const sendEmail = async (email, message, subject = 'Campaign Message') => {
+    // This function is now used for individual customer emails only
+    return sendBulkEmail([email], message, subject);
+  };
+
+  const sendWhatsApp = async (phone, message) => {
+    try {
+      // Clean phone number (remove any non-digits except +)
+      const cleanPhone = phone.replace(/[^\d+]/g, '');
+      const url = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+        return true;
+      } else {
+        // Fallback to web WhatsApp
+        const webUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+        await Linking.openURL(webUrl);
+        return true;
+      }
+    } catch (error) {
+      console.error('WhatsApp Error:', error);
+      return false;
+    }
+  };
+
+  const saveCampaignToDatabase = async (channel, audience, message) => {
+    try {
+      const { error } = await supabase
+        .from('campaigns')
+        .insert([{
+          business_id: businessId,
+          title: `${channel.toUpperCase()} Campaign - ${new Date().toLocaleDateString()}`,
+          channel: channel,
+          content: message,
+          scheduled_at: new Date().toISOString(),
+        }]);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error saving campaign:', error);
+    }
+  };
+
+  const handleStartCampaign = async () => {
     if (!campaignMessage.trim()) {
-      Alert.alert(t('common.error'), t('crm.alerts.enterMessage'));
+      Alert.alert('Error', 'Please enter a message');
       return;
     }
 
-    // Logic to send campaign would go here
-    console.log({
-        channel: campaignChannel,
-        audience: campaignAudience,
-        message: campaignMessage,
-    });
-    
-    setCampaignModalVisible(false);
+    setSendingCampaign(true);
+
+    try {
+      // Save campaign to database
+      await saveCampaignToDatabase(campaignChannel, campaignAudience, campaignMessage);
+
+      // Get target customers based on selection
+      let targetCustomers = [];
+      if (campaignAudience === 'all') {
+        targetCustomers = customers;
+      } else {
+        // For specific group, let user choose or use high-value/recent customers
+        targetCustomers = customers
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          .slice(0, Math.min(5, customers.length));
+      }
+
+      // Filter customers based on channel requirements
+      const eligibleCustomers = targetCustomers.filter(customer => {
+        switch (campaignChannel) {
+          case 'sms':
+          case 'whatsapp':
+            return customer.phone && customer.phone.trim() !== '';
+          case 'email':
+            return customer.email && customer.email.trim() !== '';
+          default:
+            return false;
+        }
+      });
+
+      if (eligibleCustomers.length === 0) {
+        Alert.alert(
+          'No Eligible Customers', 
+          `No customers have ${campaignChannel === 'email' ? 'email addresses' : 'phone numbers'} for this campaign.`
+        );
+        setSendingCampaign(false);
+        return;
+      }
+
+      let successCount = 0;
+      let failureCount = 0;
+      const failedCustomers = [];
+
+      // Show confirmation before sending
+      const proceed = await new Promise((resolve) => {
+        Alert.alert(
+          'Confirm Campaign',
+          `Send ${campaignChannel.toUpperCase()} to ${eligibleCustomers.length} customers?`,
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Send', onPress: () => resolve(true) }
+          ]
+        );
+      });
+
+      if (!proceed) {
+        setSendingCampaign(false);
+        return;
+      }
+
+      // Send messages based on channel
+      if (campaignChannel === 'email') {
+        // For email campaigns, send all at once using BCC
+        const emails = eligibleCustomers.map(c => c.email).filter(email => email && email.trim() !== '');
+        
+        if (emails.length > 0) {
+          const success = await sendBulkEmail(emails, campaignMessage, 'Marketing Campaign');
+          if (success) {
+            successCount = emails.length;
+            failureCount = 0;
+          } else {
+            successCount = 0;
+            failureCount = emails.length;
+          }
+        }
+      } else {
+        // For SMS/WhatsApp, send individually as these don't support bulk
+        for (const customer of eligibleCustomers) {
+          let success = false;
+
+          try {
+            switch (campaignChannel) {
+              case 'sms':
+                success = await sendSMS(customer.phone, campaignMessage);
+                break;
+              case 'whatsapp':
+                success = await sendWhatsApp(customer.phone, campaignMessage);
+                break;
+            }
+
+            if (success) {
+              successCount++;
+            } else {
+              failureCount++;
+              failedCustomers.push(customer.name);
+            }
+          } catch (error) {
+            console.error(`Failed to send to ${customer.name}:`, error);
+            failureCount++;
+            failedCustomers.push(customer.name);
+          }
+
+          // Small delay between sends to avoid overwhelming the system
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+
+      setCampaignModalVisible(false);
+      
+      // Show detailed results
+      let resultMessage = `Campaign Results:\n\n✅ Successful: ${successCount}\n❌ Failed: ${failureCount}`;
+      
+      if (failedCustomers.length > 0 && failedCustomers.length <= 3) {
+        resultMessage += `\n\nFailed customers: ${failedCustomers.join(', ')}`;
+      } else if (failedCustomers.length > 3) {
+        resultMessage += `\n\nSome customers couldn't be reached.`;
+      }
+
+      if (successCount > 0) {
+        resultMessage += `\n\nNote: Messages opened in external apps for sending.`;
+      }
+      
+      Alert.alert('Campaign Complete', resultMessage, [{ text: 'OK' }]);
+      
+      // Reset state
+      setCampaignMessage('');
+    } catch (error) {
+      console.error('Campaign error:', error);
+      Alert.alert('Error', 'Failed to send campaign');
+    } finally {
+      setSendingCampaign(false);
+    }
+  };
+
+  const handleCustomerPress = (customer) => {
     Alert.alert(
-      t('crm.alerts.sentTitle'),
-      t('crm.alerts.sentBody', { channel: campaignChannel, audience: campaignAudience === 'all' ? t('crm.modal.audienceAll') : t('crm.modal.audienceSpecific') }),
-      [{ text: t('crm.alerts.ok') }]
+      customer.name,
+      `Phone: ${customer.phone || 'N/A'}\nEmail: ${customer.email || 'N/A'}\nJoined: ${new Date(customer.created_at).toLocaleDateString()}`,
+      [
+        { 
+          text: 'Call', 
+          onPress: () => {
+            if (customer.phone) {
+              Linking.openURL(`tel:${customer.phone}`);
+            } else {
+              Alert.alert('No Phone', 'This customer has no phone number');
+            }
+          }
+        },
+        { 
+          text: 'Message', 
+          onPress: () => {
+            if (customer.phone) {
+              sendSMS(customer.phone, 'Hello! Thanks for being our valued customer.');
+            } else {
+              Alert.alert('No Phone', 'This customer has no phone number');
+            }
+          }
+        },
+        { 
+          text: 'Email', 
+          onPress: () => {
+            if (customer.email) {
+              sendEmail(customer.email, 'Hello! Thanks for being our valued customer.', 'Thank You');
+            } else {
+              Alert.alert('No Email', 'This customer has no email address');
+            }
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
     );
-    
-    // Reset state for next time
-    setCampaignMessage('');
   };
 
   const renderCustomerItem = ({ item }) => (
     <TouchableOpacity 
       style={styles.customerItem} 
-      onPress={() => {
-        Alert.alert(
-          item.name,
-          t('crm.alerts.customerDetails', { phone: item.phone, email: item.email, spend: item.totalSpend.toLocaleString('en-IN'), lastPurchase: item.lastPurchase }),
-          [
-            { text: t('crm.alerts.callCustomer'), onPress: () => Alert.alert(t('productDetails.featureComingSoon'), '') },
-            { text: t('crm.alerts.sendMessage'), onPress: () => Alert.alert(t('productDetails.featureComingSoon'), '') },
-            { text: t('crm.alerts.cancel'), style: 'cancel' }
-          ]
-        );
-      }}
+      onPress={() => handleCustomerPress(item)}
     >
       <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+        <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
       </View>
       <View style={styles.customerInfo}>
         <Text style={styles.customerName}>{item.name}</Text>
         <Text style={styles.customerDetails}>
-          Last Purchase: {item.lastPurchase} • Total Spend: ₹{item.totalSpend.toLocaleString('en-IN')}
+          {item.phone && `📞 ${item.phone}`}
+          {item.phone && item.email && ' • '}
+          {item.email && `📧 ${item.email}`}
+        </Text>
+        <Text style={styles.customerSubDetails}>
+          Joined: {new Date(item.created_at).toLocaleDateString()}
         </Text>
       </View>
       <Icon name="chevron-right" size={24} color={theme.colors.subtleText} />
@@ -151,7 +455,7 @@ const CRMScreen = ({ navigation }) => {
       <View style={styles.modalBackdrop}>
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{t('crm.modal.title')}</Text>
+            <Text style={styles.modalTitle}>Launch Campaign</Text>
             <TouchableOpacity onPress={() => setCampaignModalVisible(false)}>
               <Icon name="close" size={24} color={theme.colors.subtleText} />
             </TouchableOpacity>
@@ -159,53 +463,102 @@ const CRMScreen = ({ navigation }) => {
           
           <ScrollView>
              {/* Channel Selection */}
-            <Text style={styles.modalSectionTitle}>{t('crm.modal.step1')}</Text>
+            <Text style={styles.modalSectionTitle}>Step 1: Choose Channel</Text>
             <View style={styles.optionGroup}>
                 {CAMPAIGN_CHANNELS.map(channel => (
-                    <TouchableOpacity key={channel.key} style={[styles.optionButton, campaignChannel === channel.key && styles.optionButtonActive]} onPress={() => setCampaignChannel(channel.key)}>
+                    <TouchableOpacity 
+                      key={channel.key} 
+                      style={[styles.optionButton, campaignChannel === channel.key && styles.optionButtonActive]} 
+                      onPress={() => setCampaignChannel(channel.key)}
+                    >
                         <Icon name={channel.icon} size={20} color={campaignChannel === channel.key ? theme.colors.primary : theme.colors.subtleText} />
-                        <Text style={[styles.optionButtonText, campaignChannel === channel.key && styles.optionButtonTextActive]}>{t(`crm.modal.channels.${channel.key}`)}</Text>
+                        <Text style={[styles.optionButtonText, campaignChannel === channel.key && styles.optionButtonTextActive]}>
+                          {channel.name}
+                        </Text>
                     </TouchableOpacity>
                 ))}
             </View>
 
             {/* Audience Selection */}
-            <Text style={styles.modalSectionTitle}>{t('crm.modal.step2')}</Text>
+            <Text style={styles.modalSectionTitle}>Step 2: Select Audience</Text>
             <View style={styles.optionGroup}>
-                <TouchableOpacity style={[styles.optionButton, campaignAudience === 'all' && styles.optionButtonActive]} onPress={() => setCampaignAudience('all')}>
-                    <Text style={[styles.optionButtonText, campaignAudience === 'all' && styles.optionButtonTextActive]}>{t('crm.modal.audienceAll')}</Text>
+                <TouchableOpacity 
+                  style={[styles.optionButton, campaignAudience === 'all' && styles.optionButtonActive]} 
+                  onPress={() => setCampaignAudience('all')}
+                >
+                    <Text style={[styles.optionButtonText, campaignAudience === 'all' && styles.optionButtonTextActive]}>
+                      All Customers ({customers.filter(c => 
+                        campaignChannel === 'email' 
+                          ? c.email && c.email.trim() !== '' 
+                          : c.phone && c.phone.trim() !== ''
+                      ).length})
+                    </Text>
                 </TouchableOpacity>
-                 <TouchableOpacity style={[styles.optionButton, campaignAudience === 'specific' && styles.optionButtonActive]} onPress={() => setCampaignAudience('specific')}>
-                    <Text style={[styles.optionButtonText, campaignAudience === 'specific' && styles.optionButtonTextActive]}>{t('crm.modal.audienceSpecific')}</Text>
+                 <TouchableOpacity 
+                   style={[styles.optionButton, campaignAudience === 'specific' && styles.optionButtonActive]} 
+                   onPress={() => setCampaignAudience('specific')}
+                 >
+                    <Text style={[styles.optionButtonText, campaignAudience === 'specific' && styles.optionButtonTextActive]}>
+                      Recent Customers ({Math.min(5, customers.filter(c => 
+                        campaignChannel === 'email' 
+                          ? c.email && c.email.trim() !== '' 
+                          : c.phone && c.phone.trim() !== ''
+                      ).length)})
+                    </Text>
                 </TouchableOpacity>
             </View>
 
             {/* Message Input */}
-            <Text style={styles.modalSectionTitle}>{t('crm.modal.step3')}</Text>
+            <Text style={styles.modalSectionTitle}>Step 3: Compose Message</Text>
             <TextInput
                 style={styles.messageInput}
-                placeholder={t('crm.modal.messagePlaceholder', { channel: campaignChannel })}
+                placeholder={`Enter your ${campaignChannel} message here...`}
                 placeholderTextColor={theme.colors.subtleText}
                 multiline
                 value={campaignMessage}
                 onChangeText={setCampaignMessage}
             />
             <View style={styles.templateContainer}>
-                <Text style={styles.templateText}>{t('crm.modal.useTemplate')} </Text>
-                <TouchableOpacity onPress={() => setCampaignMessage('🌟 Diwali Offer! Get 20% off on all items. Use code DIWALI20. Valid till this weekend!')}>
-                    <Text style={styles.templateLink}>{t('crm.modal.templateDiwali')}</Text>
+                <Text style={styles.templateText}>Quick templates: </Text>
+                <TouchableOpacity onPress={() => setCampaignMessage('🌟 Special Offer! Get 20% off on all items. Use code SAVE20. Limited time offer!')}>
+                    <Text style={styles.templateLink}>Discount Offer</Text>
+                </TouchableOpacity>
+                <Text style={styles.templateText}> • </Text>
+                <TouchableOpacity onPress={() => setCampaignMessage('🎉 Thank you for being our valued customer! Check out our latest products and services.')}>
+                    <Text style={styles.templateLink}>Thank You</Text>
                 </TouchableOpacity>
             </View>
           </ScrollView>
 
-          <TouchableOpacity style={[styles.primaryButton, !campaignMessage && {opacity: 0.5}]} onPress={handleStartCampaign} disabled={!campaignMessage}>
-            <Text style={styles.primaryButtonText}>{t('crm.modal.sendCampaign')}</Text>
-            <Icon name="send" size={20} color={theme.colors.white} />
+          <TouchableOpacity 
+            style={[styles.primaryButton, (!campaignMessage || sendingCampaign) && {opacity: 0.5}]} 
+            onPress={handleStartCampaign} 
+            disabled={!campaignMessage || sendingCampaign}
+          >
+            {sendingCampaign ? (
+              <ActivityIndicator size="small" color={theme.colors.white} />
+            ) : (
+              <>
+                <Text style={styles.primaryButtonText}>Send Campaign</Text>
+                <Icon name="send" size={20} color={theme.colors.white} />
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[theme.typography.body, { marginTop: theme.spacing.md }]}>
+          Loading customers...
+        </Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -219,7 +572,7 @@ const CRMScreen = ({ navigation }) => {
         >
           <Icon name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={theme.typography.h1}>{t('crm.title')}</Text>
+        <Text style={theme.typography.h1}>CRM</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -227,26 +580,43 @@ const CRMScreen = ({ navigation }) => {
         <Icon name="search" size={24} color={theme.colors.subtleText} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder={t('crm.searchPlaceholder')}
+          placeholder="Search customers..."
           placeholderTextColor={theme.colors.subtleText}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
       </View>
 
-      <TouchableOpacity style={styles.primaryButton} onPress={() => setCampaignModalVisible(true)}>
-        <Text style={styles.primaryButtonText}>{t('crm.startCampaign')}</Text>
+      <TouchableOpacity 
+        style={[styles.primaryButton, customers.length === 0 && { opacity: 0.5 }]} 
+        onPress={() => setCampaignModalVisible(true)}
+        disabled={customers.length === 0}
+      >
+        <Text style={styles.primaryButtonText}>
+          {customers.length === 0 ? 'No Customers Yet' : 'Start Campaign'}
+        </Text>
         <Icon name="campaign" size={24} color={theme.colors.white} />
       </TouchableOpacity>
 
       <View style={styles.customerListContainer}>
-        <FlatList
-          data={filteredCustomers}
-          renderItem={renderCustomerItem}
-          keyExtractor={item => item.id}
-          contentContainerStyle={{ paddingBottom: theme.spacing.xl }}
-          showsVerticalScrollIndicator={false}
-        />
+        {filteredCustomers.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Icon name="people-outline" size={64} color={theme.colors.subtleText} />
+            <Text style={[theme.typography.body, { marginTop: theme.spacing.md, textAlign: 'center' }]}>
+              {customers.length === 0 
+                ? 'No customers found.\nAdd customers to start using CRM features.' 
+                : 'No customers match your search.'}
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredCustomers}
+            renderItem={renderCustomerItem}
+            keyExtractor={item => item.id}
+            contentContainerStyle={{ paddingBottom: theme.spacing.xl }}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
       </View>
     </SafeAreaView>
   );
@@ -256,6 +626,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -312,6 +686,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.xl,
+  },
   customerItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -345,6 +725,13 @@ const styles = StyleSheet.create({
   customerDetails: {
     ...theme.typography.subtext,
     fontSize: 12,
+    marginTop: 2,
+  },
+  customerSubDetails: {
+    ...theme.typography.subtext,
+    fontSize: 11,
+    color: theme.colors.subtleText,
+    marginTop: 2,
   },
   // Modal Styles
   modalBackdrop: {
@@ -417,7 +804,9 @@ const styles = StyleSheet.create({
   },
   templateContainer: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       marginTop: theme.spacing.sm,
+      alignItems: 'center',
   },
   templateText: {
       ...theme.typography.subtext,

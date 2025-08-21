@@ -26,6 +26,7 @@ import ProfileScreen from '../screens/ProfileScreen.js';
 import AddTransactionScreen from '../screens/AddTransactionScreen.js';
 import ProductDetailsScreen from '../screens/ProductDetailsScreen.js';
 import AddProductScreen from '../screens/AddProductScreen.js';
+import Notification from '../screens/NotificationScreen.js';
 
 const Stack = createNativeStackNavigator();
 
@@ -137,6 +138,11 @@ const AppNavigator = () => {
             <Stack.Screen 
               name="AddProductScreen" 
               component={AddProductScreen}
+              options={{ gestureEnabled: true }}
+            />
+            <Stack.Screen 
+              name="NotificationScreen" 
+              component={Notification}
               options={{ gestureEnabled: true }}
             />
           </>
