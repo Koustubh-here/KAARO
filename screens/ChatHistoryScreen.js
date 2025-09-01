@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext'; // ADDED
 
 const ChatHistoryScreen = ({ navigation }) => {
+  const { theme } = useTheme(); // ADDED
   const { user, business } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -32,35 +34,36 @@ const ChatHistoryScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Chat History</Text>
-        <TouchableOpacity style={styles.button} onPress={newChat}><Text style={styles.buttonText}>New Chat</Text></TouchableOpacity>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+        <Text style={[styles.title, { color: theme.colors.text }]}>Chat History</Text>
+        <TouchableOpacity style={[styles.button, { backgroundColor: theme.colors.primary }]} onPress={newChat}>
+            <Text style={[styles.buttonText, { color: theme.colors.white }]}>New Chat</Text>
+        </TouchableOpacity>
       </View>
       {loading ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" />
-          <Text style={{ marginTop: 8 }}>Loading chats…</Text>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.subtleText }]}>Loading chats…</Text>
         </View>
       ) : (
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
           ListEmptyComponent={() => (
-            <View style={{ padding: 24 }}>
-              <Text style={{ textAlign: 'center', color: '#6E717A' }}>No chats yet. Start a new one!</Text>
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: theme.colors.subtleText }]}>No chats yet. Start a new one!</Text>
             </View>
           )}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.item}
+              style={[styles.item, { backgroundColor: theme.colors.surface }]}
               onPress={() => {
-                // Pass back selected conversation id; Home screen will read it from params if needed
                 navigation.navigate('Home', { openConversationId: item.id });
               }}
             >
-              <Text style={styles.itemTitle}>{item.title}</Text>
-              <Text style={styles.itemBody}>{new Date(item.created_at).toLocaleString()}</Text>
+              <Text style={[styles.itemTitle, { color: theme.colors.text }]}>{item.title}</Text>
+              <Text style={[styles.itemBody, { color: theme.colors.subtleText }]}>{new Date(item.created_at).toLocaleString()}</Text>
             </TouchableOpacity>
           )}
         />
@@ -70,16 +73,54 @@ const ChatHistoryScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7F8FC' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#FFFFFF' },
-  title: { fontSize: 20, fontWeight: '600' },
-  button: { paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#4A69E2', borderRadius: 8 },
-  buttonText: { color: '#FFFFFF', fontWeight: '600' },
-  item: { backgroundColor: '#FFFFFF', marginHorizontal: 16, marginTop: 8, padding: 12, borderRadius: 8 },
-  itemTitle: { fontWeight: '600', marginBottom: 4 },
-  itemBody: { color: '#333' },
+  container: { 
+    flex: 1,
+  },
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    padding: 16,
+  },
+  title: { 
+    fontSize: 20, 
+    fontWeight: '600',
+  },
+  button: { 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderRadius: 8,
+  },
+  buttonText: { 
+    fontWeight: '600',
+  },
+  item: { 
+    marginHorizontal: 16, 
+    marginTop: 8, 
+    padding: 12, 
+    borderRadius: 8,
+  },
+  itemTitle: { 
+    fontWeight: '600', 
+    marginBottom: 4,
+  },
+  itemBody: {
+    fontSize: 12,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 8,
+  },
+  emptyContainer: {
+    padding: 24,
+  },
+  emptyText: {
+    textAlign: 'center',
+  }
 });
 
 export default ChatHistoryScreen;
-
-

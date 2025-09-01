@@ -25,50 +25,19 @@ import { useAuth } from '../context/AuthContext';
 import { listProducts } from '../lib/db';
 import { supabase } from '../lib/supabaseClient';
 import { useFocusEffect } from '@react-navigation/native';
-
-// THEME & DESIGN SYSTEM (Consistent with Home.js)
-const theme = {
-  colors: {
-    primary: '#4A69E2',
-    background: '#F7F8FC',
-    surface: '#FFFFFF',
-    text: '#121212',
-    subtleText: '#6E717A',
-    success: '#2E7D32',
-    danger: '#C62828',
-    warning: '#FFAB00',
-    border: '#E8E9F1',
-    white: '#FFFFFF',
-  },
-  spacing: {
-    xs: 4, sm: 8, md: 16, lg: 24, xl: 32,
-  },
-  typography: {
-    h1: { fontFamily: 'Poppins-Bold', fontSize: 28, color: '#121212' },
-    h2: { fontFamily: 'Poppins-SemiBold', fontSize: 20, color: '#121212' },
-    body: { fontFamily: 'Poppins-Regular', fontSize: 16, color: '#6E717A' },
-    subtext: { fontFamily: 'Poppins-Regular', fontSize: 14, color: '#6E717A' },
-    label: { fontFamily: 'Poppins-Medium', fontSize: 12, color: '#6E717A' },
-  },
-  borderRadius: { sm: 8, md: 16, lg: 24, full: 999 },
-  shadow: {
-    shadowColor: '#4A69E2',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-};
+import { useTheme } from '../context/ThemeContext'; // ADDED
 
 const CATEGORIES_KEYS = ['all'];
 
 const InventoryScreen = ({ navigation }) => {
+  const { theme } = useTheme(); // ADDED
   const { t } = useI18n();
   const { business } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedTab, setSelectedTab] = useState('Inventory');
 
   const load = useCallback(async () => {
     if (!business?.id) return;
@@ -117,16 +86,24 @@ const InventoryScreen = ({ navigation }) => {
     return { color: theme.colors.success };
   };
 
+  const bottomNavItems = [
+    { route: 'Home', label: t('home.bottomNav.home'), icon: 'home' },
+    { route: 'Inventory', label: t('home.bottomNav.inventory'), icon: 'inventory' },
+    { route: 'Ledger', label: t('home.bottomNav.ledger'), icon: 'account-balance-wallet' },
+    { route: 'CRM', label: t('home.bottomNav.crm'), icon: 'people' },
+    { route: 'Reports', label: t('home.bottomNav.reports'), icon: 'assessment' },
+  ];
+
   const renderProductItem = ({ item }) => (
     <TouchableOpacity 
-      style={styles.productItem}
+      style={[styles.productItem, { backgroundColor: theme.colors.surface }, theme.shadow]}
       onPress={() => {
         navigation.navigate('ProductDetailsScreen', { product: item });
       }}
     >
-      <Image source={{ uri: item.image || 'https://via.placeholder.com/56' }} style={styles.productImage} />
+      <Image source={{ uri: item.image || 'https://via.placeholder.com/56' }} style={[styles.productImage, { backgroundColor: theme.colors.border }]} />
       <View style={styles.productInfo}>
-        <Text style={styles.productName}>{item.name}</Text>
+        <Text style={[styles.productName, { color: theme.colors.text }]}>{item.name}</Text>
         <Text style={[styles.productStock, getStockStyle(item.quantity ?? item.stock ?? 0)]}>
           {item.quantity ?? item.stock ?? 0} in stock
         </Text>
@@ -136,8 +113,8 @@ const InventoryScreen = ({ navigation }) => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={theme.dark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
       
       <View style={styles.header}>
         <TouchableOpacity 
@@ -146,7 +123,7 @@ const InventoryScreen = ({ navigation }) => {
         >
           <Icon name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={theme.typography.h1}>{t('inventory.title')}</Text>
+        <Text style={[theme.typography.h1, { color: theme.colors.text }]}>{t('inventory.title')}</Text>
         <TouchableOpacity 
           style={styles.addButton} 
           onPress={() => navigation.navigate('AddProductScreen')}
@@ -155,10 +132,10 @@ const InventoryScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.searchContainer}>
+      <View style={[styles.searchContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
         <Icon name="search" size={24} color={theme.colors.subtleText} style={styles.searchIcon} />
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: theme.colors.text }]}
           placeholder={t('inventory.searchPlaceholder')}
           placeholderTextColor={theme.colors.subtleText}
           value={searchQuery}
@@ -167,17 +144,25 @@ const InventoryScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.categoriesContainer}>
-        <Text style={styles.sectionTitle}>{t('inventory.categories')}</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('inventory.categories')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesScroll}>
           {CATEGORIES_KEYS.map(categoryKey => {
             const isActive = categoryKey === selectedCategory;
             return (
               <TouchableOpacity
                 key={categoryKey}
-                style={[styles.categoryButton, isActive && styles.categoryButtonActive]}
+                style={[
+                    styles.categoryButton, 
+                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                    isActive && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
+                ]}
                 onPress={() => setSelectedCategory(categoryKey)}
               >
-                <Text style={[styles.categoryButtonText, isActive && styles.categoryButtonTextActive]}>
+                <Text style={[
+                    styles.categoryButtonText, 
+                    { color: theme.colors.text },
+                    isActive && { color: theme.colors.white }
+                ]}>
                   {t(`inventory.categoryList.${categoryKey}`)}
                 </Text>
               </TouchableOpacity>
@@ -187,7 +172,7 @@ const InventoryScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.productListContainer}>
-        <Text style={styles.sectionTitle}>{`${t('inventory.products')} (${filteredProducts.length})`}</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{`${t('inventory.products')} (${filteredProducts.length})`}</Text>
         <FlatList
           data={filteredProducts}
           renderItem={renderProductItem}
@@ -197,13 +182,32 @@ const InventoryScreen = ({ navigation }) => {
           ListEmptyComponent={
             <View style={styles.emptyStateContainer}>
                 <Icon name="search-off" size={64} color={theme.colors.border} />
-                <Text style={styles.emptyStateText}>{isLoading ? t('common.loading') : t('inventory.noProducts')}</Text>
+                <Text style={[styles.emptyStateText, { color: theme.colors.subtleText }]}>{isLoading ? t('common.loading') : t('inventory.noProducts')}</Text>
                 {!isLoading && (
-                  <Text style={styles.emptyStateSubtext}>{t('inventory.tryAdjusting')}</Text>
+                  <Text style={[styles.emptyStateSubtext, { color: theme.colors.subtleText }]}>{t('inventory.tryAdjusting')}</Text>
                 )}
             </View>
           }
         />
+      </View>
+
+      {/* BOTTOM NAVIGATION */}
+      <View style={[styles.bottomNav, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
+        {bottomNavItems.map((item) => (
+          <TouchableOpacity 
+            key={item.route} 
+            style={styles.bottomNavItem} 
+            onPress={() => {
+              setSelectedTab(item.route);
+              if (item.route !== 'Inventory') {
+                navigation.navigate(item.route === 'Home' ? 'Home' : `${item.route}Screen`);
+              }
+            }}
+          >
+            <Icon name={item.icon} size={28} color={selectedTab === item.route ? theme.colors.primary : theme.colors.subtleText} />
+            <Text style={[styles.bottomNavText, { color: theme.colors.subtleText }, selectedTab === item.route && { color: theme.colors.primary }]}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
     </SafeAreaView>
   );
@@ -212,105 +216,92 @@ const InventoryScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: Platform.OS === 'android' ? theme.spacing.lg : theme.spacing.sm,
-    paddingBottom: theme.spacing.sm,
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? 24 : 8,
+    paddingBottom: 8,
   },
   backButton: {
-    padding: theme.spacing.sm,
-    marginLeft: -theme.spacing.sm,
+    padding: 8,
+    marginLeft: -8,
   },
   addButton: {
-    padding: theme.spacing.sm,
+    padding: 8,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.full,
-    marginHorizontal: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.md,
+    borderRadius: 999,
+    marginHorizontal: 24,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   searchIcon: {
-    marginRight: theme.spacing.sm,
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    ...theme.typography.body,
-    color: theme.colors.text,
+    fontFamily: 'Poppins-Regular',
+    fontSize: 16,
     height: 50,
   },
   categoriesContainer: {
-    marginTop: theme.spacing.lg,
+    marginTop: 24,
   },
   sectionTitle: {
-    ...theme.typography.h2,
-    marginHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 20,
+    marginHorizontal: 24,
+    marginBottom: 16,
   },
   categoriesScroll: {
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: 24,
   },
   categoryButton: {
-    backgroundColor: theme.colors.surface,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.borderRadius.full,
-    marginRight: theme.spacing.sm,
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    borderRadius: 999,
+    marginRight: 8,
     borderWidth: 1,
-    borderColor: theme.colors.border,
   },
-  categoryButtonActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
+  // Removed categoryButtonActive styles, now handled inline
   categoryButtonText: {
-    ...theme.typography.subtext,
-    color: theme.colors.text,
-    fontFamily: 'Poppins-Medium'
+    fontFamily: 'Poppins-Medium',
+    fontSize: 14,
   },
-  categoryButtonTextActive: {
-    color: theme.colors.white,
-  },
+  // Removed categoryButtonTextActive styles, now handled inline
   productListContainer: {
     flex: 1,
-    marginTop: theme.spacing.lg,
+    marginTop: 24,
   },
   productItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    marginHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
-    padding: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
-    ...theme.shadow,
+    marginHorizontal: 24,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 16,
   },
   productImage: {
     width: 56,
     height: 56,
-    borderRadius: theme.borderRadius.sm,
-    backgroundColor: theme.colors.border,
+    borderRadius: 8,
   },
   productInfo: {
     flex: 1,
-    marginLeft: theme.spacing.md,
+    marginLeft: 16,
   },
   productName: {
-    ...theme.typography.body,
-    color: theme.colors.text,
     fontFamily: 'Poppins-Medium',
+    fontSize: 16,
   },
   productStock: {
-    ...theme.typography.subtext,
+    fontFamily: 'Poppins-Regular',
+    fontSize: 14,
   },
   emptyStateContainer: {
       flex: 1,
@@ -319,16 +310,25 @@ const styles = StyleSheet.create({
       paddingTop: '20%',
   },
   emptyStateText: {
-      ...theme.typography.h2,
-      marginTop: theme.spacing.md,
-      color: theme.colors.subtleText,
+      fontFamily: 'Poppins-SemiBold',
+      fontSize: 20,
+      marginTop: 16,
   },
   emptyStateSubtext: {
-      ...theme.typography.body,
-      marginTop: theme.spacing.sm,
+      fontFamily: 'Poppins-Regular',
+      fontSize: 16,
+      marginTop: 8,
       textAlign: 'center',
-      color: theme.colors.subtleText,
   },
+  // Bottom Nav
+  bottomNav: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    paddingVertical: 8,
+    paddingBottom: 21,
+  },
+  bottomNavItem: { flex: 1, alignItems: 'center' },
+  bottomNavText: { fontFamily: 'Poppins-Medium', fontSize: 12, marginTop: 4 },
 });
 
 export default InventoryScreen;

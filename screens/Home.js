@@ -3,8 +3,7 @@
  * A premium, user-centric dashboard providing an elegant and intuitive
  * overview of business performance. Designed for clarity and delight.
  */
-
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +19,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   FlatList,
+  BackHandler,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
@@ -27,77 +27,13 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import { useFocusEffect } from '@react-navigation/native';
 import { runAgent } from '../lib/agent/agent';
-// ADDED: Import AsyncStorage to sync notification state
+import { useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// THEME & DESIGN SYSTEM =================================================
-const theme = {
-  colors: {
-    primary: '#4A69E2', // A softer, more professional blue
-    background: '#F7F8FC', // A slightly warmer, brighter background
-    surface: '#FFFFFF', // Card and component backgrounds
-    text: '#121212',
-    subtleText: '#6E717A',
-    success: '#2E7D32',
-    danger: '#C62828',
-    warning: '#FFAB00',
-    border: '#E8E9F1',
-    white: '#FFFFFF',
-    black: '#000000',
-  },
-  spacing: {
-    xs: 4,
-    sm: 8,
-    md: 16,
-    lg: 24,
-    xl: 32,
-  },
-  typography: {
-    h1: {
-      fontFamily: 'Poppins-Bold',
-      fontSize: 28,
-      color: '#121212',
-    },
-    h2: {
-      fontFamily: 'Poppins-SemiBold',
-      fontSize: 20,
-      color: '#121212',
-    },
-    body: {
-      fontFamily: 'Poppins-Regular',
-      fontSize: 16,
-      color: '#6E717A',
-    },
-    subtext: {
-      fontFamily: 'Poppins-Regular',
-      fontSize: 14,
-      color: '#6E717A',
-    },
-    label: {
-      fontFamily: 'Poppins-Medium',
-      fontSize: 12,
-      color: '#6E717A',
-    },
-  },
-  borderRadius: {
-    sm: 8,
-    md: 16,
-    lg: 24,
-    full: 999,
-  },
-  shadow: {
-    shadowColor: '#4A69E2',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-};
-// =========================================================================
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const Home = ({ navigation, route }) => {
+  const { theme } = useTheme();
   const { t } = useI18n();
   const { signOut, business, user } = useAuth();
   const [selectedTab, setSelectedTab] = useState('Home');
@@ -109,15 +45,50 @@ const Home = ({ navigation, route }) => {
   ]);
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
-  const [summaryIndex, setSummaryIndex] = useState(0); // 0: Today, 1: Overall
+  const [summaryIndex, setSummaryIndex] = useState(0);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   const sidebarAnimation = useRef(new Animated.Value(-350)).current;
   const chatAnimation = useRef(new Animated.Value(screenHeight)).current;
   const fabAnimation = useRef(new Animated.Value(1)).current;
   const summaryScrollX = useRef(new Animated.Value(0)).current;
+  const pulseAnimation = useRef(new Animated.Value(0)).current;
 
-  // Load user profile data
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnimation, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnimation, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [pulseAnimation]);
+
+
+  useEffect(() => {
+    const handleBackPress = () => {
+      if (chatVisible) {
+        toggleChat();
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+
+    return () => backHandler.remove();
+  }, [chatVisible]);
+
+
   const loadUserProfile = useCallback(async () => {
     if (!user?.id) return;
     try {
@@ -126,7 +97,7 @@ const Home = ({ navigation, route }) => {
         .select('name, business_name, location')
         .eq('user_id', user.id)
         .single();
-      
+
       if (!error && data) {
         setUserProfile(data);
       }
@@ -135,45 +106,39 @@ const Home = ({ navigation, route }) => {
     }
   }, [user?.id]);
 
-  // CHANGED: Load notification count respecting cleared/read status from AsyncStorage
   const loadNotificationCount = useCallback(async () => {
     if (!business?.id) return;
     try {
-      // 1. Get potential notifications (e.g., low stock items)
       const { data: lowStockProducts, error } = await supabase
         .from('products')
         .select('id')
         .eq('business_id', business.id)
         .lt('quantity', 20);
-      
+
       if (error || !lowStockProducts) {
         setUnreadNotificationCount(0);
         return;
       }
 
-      // 2. Get the lists of cleared and read notifications from local storage
       const clearedIdsString = await AsyncStorage.getItem(`cleared_notifications_${business.id}`);
       const clearedIds = clearedIdsString ? new Set(JSON.parse(clearedIdsString)) : new Set();
-      
+
       const readIdsString = await AsyncStorage.getItem(`read_notifications_${business.id}`);
       const readIds = readIdsString ? new Set(JSON.parse(readIdsString)) : new Set();
-      
-      // 3. Filter the potential notifications to find the truly unread count
+
       const unreadCount = lowStockProducts.filter(product => {
         const notificationId = `low_stock_${product.id}`;
-        // A notification is unread if it's NOT cleared AND NOT read
         return !clearedIds.has(notificationId) && !readIds.has(notificationId);
       }).length;
-      
+
       setUnreadNotificationCount(unreadCount);
 
     } catch (err) {
       console.log('Error loading notification count:', err);
-      setUnreadNotificationCount(0); // Default to 0 on error
+      setUnreadNotificationCount(0);
     }
   }, [business?.id]);
 
-  // Get user initials
   const getUserInitials = () => {
     if (userProfile?.name) {
       const names = userProfile.name.trim().split(' ');
@@ -186,19 +151,17 @@ const Home = ({ navigation, route }) => {
     return user?.email?.substring(0, 2).toUpperCase() || 'U';
   };
 
-  // Calculate percentage change from previous day
   const calculatePercentageChange = (current, previous) => {
     if (!previous || previous === 0) {
-      return current > 0 ? 100 : 0; // If no previous data but current exists, show 100% increase
+      return current > 0 ? 100 : 0;
     }
     return ((current - previous) / previous) * 100;
   };
 
-  // ANIMATION LOGIC (Refined for a smoother feel)
   const toggleSidebar = () => {
     const toValue = sidebarVisible ? -350 : 0;
-    const fabToValue = sidebarVisible ? 1 : 0; // Hide FAB when sidebar opens
-    
+    const fabToValue = sidebarVisible ? 1 : 0;
+
     Animated.parallel([
       Animated.spring(sidebarAnimation, {
         toValue,
@@ -212,7 +175,7 @@ const Home = ({ navigation, route }) => {
         useNativeDriver: true,
       }),
     ]).start();
-    
+
     setSidebarVisible(!sidebarVisible);
   };
 
@@ -243,7 +206,7 @@ const Home = ({ navigation, route }) => {
   const toggleChat = async () => {
     const toValue = chatVisible ? screenHeight : 0;
     const fabToValue = chatVisible ? 1 : 0;
-    setChatVisible(!chatVisible); // Toggle state optimistically for responsiveness
+    setChatVisible(!chatVisible);
 
     Animated.parallel([
       Animated.spring(chatAnimation, {
@@ -275,9 +238,7 @@ const Home = ({ navigation, route }) => {
     try {
       const { reply } = await runAgent({ user, business, userText, conversationId: activeConversationId });
       setChatMessages(prev => [...prev.slice(0, -1), { id: Date.now() + 2, text: reply, isBot: true }]);
-      // After tool actions, refresh summaries and activity
       await load();
-      // refresh messages from DB to stay in sync
       if (activeConversationId) await loadConversationMessages(activeConversationId);
     } catch (e) {
       setChatMessages(prev => [...prev.slice(0, -1), { id: Date.now() + 2, text: e.message || 'Error', isBot: true }]);
@@ -285,8 +246,8 @@ const Home = ({ navigation, route }) => {
   };
 
   const [activityData, setActivityData] = useState([]);
-  const [summary, setSummary] = useState({ 
-    todayIncome: 0, 
+  const [summary, setSummary] = useState({
+    todayIncome: 0,
     todayExpenses: 0,
     overallIncome: 0,
     overallExpenses: 0,
@@ -298,33 +259,29 @@ const Home = ({ navigation, route }) => {
 
   const load = useCallback(async () => {
     if (!business?.id) return;
-    
+
     const today = new Date().toISOString().split('T')[0];
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    
-    // Get today's transactions
+
     const { data: todayTx } = await supabase
       .from('transactions')
       .select('*')
       .eq('business_id', business.id)
       .eq('date', today);
-    
-    // Get yesterday's transactions
+
     const { data: yesterdayTx } = await supabase
       .from('transactions')
       .select('*')
       .eq('business_id', business.id)
       .eq('date', yesterday);
-    
-    // Get all transactions
+
     const { data: allTx } = await supabase
       .from('transactions')
       .select('*')
       .eq('business_id', business.id)
       .order('created_at', { ascending: false });
-    
-    // Get previous period transactions (for overall comparison)
+
     const { data: prevTx } = await supabase
       .from('transactions')
       .select('*')
@@ -333,17 +290,16 @@ const Home = ({ navigation, route }) => {
 
     const todayIncome = (todayTx || []).filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
     const todayExpenses = (todayTx || []).filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
-    
+
     const yesterdayIncome = (yesterdayTx || []).filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
     const yesterdayExpenses = (yesterdayTx || []).filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
-    
+
     const overallIncome = (allTx || []).filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
     const overallExpenses = (allTx || []).filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
-    
+
     const prevTotalIncome = (prevTx || []).filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
     const prevTotalExpenses = (prevTx || []).filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
 
-    // Create activity data from recent transactions with proper formatting
     const recent = (allTx || []).slice(0, 10).map(t => {
       const transactionDate = new Date(t.date || t.created_at);
       const formattedDate = transactionDate.toLocaleDateString('en-IN', {
@@ -351,7 +307,7 @@ const Home = ({ navigation, route }) => {
         month: 'short',
         year: 'numeric'
       });
-      
+
       return {
         id: t.id,
         type: (t.type || '').toLowerCase(),
@@ -364,10 +320,10 @@ const Home = ({ navigation, route }) => {
         rawAmount: Number(t.amount || 0),
       };
     });
-    
+
     setActivityData(recent);
-    setSummary({ 
-      todayIncome, 
+    setSummary({
+      todayIncome,
       todayExpenses,
       overallIncome,
       overallExpenses,
@@ -376,7 +332,7 @@ const Home = ({ navigation, route }) => {
       prevTotalIncome,
       prevTotalExpenses,
     });
-  }, [business?.id]);
+  }, [business?.id, theme.colors.success, theme.colors.danger]);
 
   useFocusEffect(
     useCallback(() => {
@@ -384,14 +340,12 @@ const Home = ({ navigation, route }) => {
       load();
       loadUserProfile();
       loadNotificationCount();
-      // If navigated from ChatHistoryScreen with a selected conversation
       const openId = route?.params?.openConversationId;
       if (openId) {
         setActiveConversationId(openId);
         setChatVisible(true);
         Animated.spring(chatAnimation, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }).start();
         loadConversationMessages(openId);
-        // Clear the param to avoid reopening repeatedly
         navigation.setParams({ openConversationId: undefined });
       }
     }, [load, loadUserProfile, loadNotificationCount, route?.params?.openConversationId])
@@ -419,42 +373,38 @@ const Home = ({ navigation, route }) => {
     { title: t('home.sidebar.crm'), route: 'CRM', icon: 'people' },
     { title: t('home.sidebar.reports'), route: 'Reports', icon: 'assessment' },
     { title: t('home.sidebar.aiSettings'), route: null, icon: 'smart-toy' },
-    { title: t('home.sidebar.settings'), route: null, icon: 'settings' },
+    { title: t('home.sidebar.settings'), route: 'GeneralSettings', icon: 'settings' }
   ];
-  
+
   const quickActions = [
-      { 
-        title: t('home.newSale'), 
-        icon: 'add-shopping-cart', 
-        action: () => {
-          navigation.navigate('AddTransactionScreen', { type: t('types.income') });
-        }
-      },
-      { 
-        title: t('home.newExpense'), 
-        icon: 'receipt', 
-        action: () => {
-          navigation.navigate('AddTransactionScreen', { type: t('types.expense') });
-        }
-      },
-      { 
-        title: t('home.addStock'), 
-        icon: 'inventory', 
-        action: () => {
-          Alert.alert(t('home.alertAddStockTitle'), t('home.alertAddStockBody'), [
-            { text: t('common.ok'), onPress: () => navigation.navigate('InventoryScreen') }
-          ]);
-        }
-      },
-      { 
-        title: t('home.newReport'), 
-        icon: 'assessment', 
-        action: () => {
-          Alert.alert(t('home.alertNewReportTitle'), t('home.alertNewReportBody'), [
-            { text: t('common.ok'), onPress: () => navigation.navigate('ReportsScreen') }
-          ]);
-        }
-      },
+    {
+      title: t('home.newSale'),
+      icon: 'add-shopping-cart',
+      action: () => {
+        navigation.navigate('AddTransactionScreen', { type: t('types.income') });
+      }
+    },
+    {
+      title: t('home.newExpense'),
+      icon: 'receipt',
+      action: () => {
+        navigation.navigate('AddTransactionScreen', { type: t('types.expense') });
+      }
+    },
+    {
+      title: t('home.addStock'),
+      icon: 'inventory',
+      action: () => {
+        navigation.navigate('InventoryScreen');
+      }
+    },
+    {
+      title: t('home.newReport'),
+      icon: 'assessment',
+      action: () => {
+        navigation.navigate('ReportsScreen');
+      }
+    },
   ];
 
   const bottomNavItems = [
@@ -465,17 +415,16 @@ const Home = ({ navigation, route }) => {
     { route: 'Reports', label: t('home.bottomNav.reports'), icon: 'assessment' },
   ];
 
-  // REUSABLE & REFINED RENDER COMPONENTS
   const renderActivityItem = ({ item }) => (
     <View style={styles.activityItem}>
       <View style={[styles.activityIconContainer, { backgroundColor: `${item.color}20` }]}>
         <Icon name={item.icon} size={20} color={item.color} />
       </View>
       <View style={styles.activityContent}>
-        <Text style={styles.activityTitle}>{item.title}</Text>
+        <Text style={[styles.activityTitle, { color: theme.colors.text }]}>{item.title}</Text>
         <View style={styles.activityMeta}>
-          <Text style={styles.activityCategory}>{item.category}</Text>
-          <Text style={styles.activityTime}>{item.time}</Text>
+          <Text style={[styles.activityCategory, { color: theme.colors.primary, backgroundColor: `${theme.colors.primary}15` }]}>{item.category}</Text>
+          <Text style={[styles.activityTime, { color: theme.colors.subtleText }]}>{item.time}</Text>
         </View>
       </View>
       {item.amount ? (
@@ -490,10 +439,7 @@ const Home = ({ navigation, route }) => {
 
   const handleSidebarNavigation = (item) => {
     if (item.route) {
-      // Navigate immediately, don't wait for animation
       navigation.navigate(`${item.route}Screen`);
-      
-      // Then close sidebar
       setSidebarVisible(false);
       Animated.parallel([
         Animated.spring(sidebarAnimation, {
@@ -512,16 +458,16 @@ const Home = ({ navigation, route }) => {
   };
 
   const renderSidebar = () => (
-    <Animated.View style={[styles.sidebar, { transform: [{ translateX: sidebarAnimation }] }]}>
-      <View style={styles.sidebarHeader}>
-        <View style={styles.profileAvatar}>
-          <Text style={styles.profileInitial}>{getUserInitials()}</Text>
+    <Animated.View style={[styles.sidebar, { transform: [{ translateX: sidebarAnimation }], backgroundColor: theme.colors.background }]}>
+      <View style={[styles.sidebarHeader, { borderBottomColor: theme.colors.border }]}>
+        <View style={[styles.profileAvatar, { backgroundColor: theme.colors.primary }]}>
+          <Text style={[styles.profileInitial, { color: theme.colors.white }]}>{getUserInitials()}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.profileName}>
+          <Text style={[styles.profileName, { color: theme.colors.text }]}>
             {userProfile?.name || business?.name || 'User'}
           </Text>
-          <Text style={styles.profileEmail}>
+          <Text style={[styles.profileEmail, { color: theme.colors.subtleText }]}>
             {user?.email || 'user@business.com'}
           </Text>
         </View>
@@ -531,18 +477,18 @@ const Home = ({ navigation, route }) => {
       </View>
       <ScrollView>
         {sidebarItems.map((item) => (
-          <TouchableOpacity 
-            key={item.title} 
+          <TouchableOpacity
+            key={item.title}
             style={styles.sidebarItem}
             onPress={() => handleSidebarNavigation(item)}
             activeOpacity={0.7}
           >
             <Icon name={item.icon} size={24} color={theme.colors.subtleText} />
-            <Text style={styles.sidebarItemText}>{item.title}</Text>
+            <Text style={[styles.sidebarItemText, { color: theme.colors.text }]}>{item.title}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.sidebarItem, styles.sidebarLogout]}
         onPress={() => {
           Alert.alert(
@@ -550,8 +496,8 @@ const Home = ({ navigation, route }) => {
             t('home.sidebar.logoutBody'),
             [
               { text: t('common.cancel'), style: 'cancel' },
-              { 
-                text: t('home.sidebar.logout'), 
+              {
+                text: t('home.sidebar.logout'),
                 style: 'destructive',
                 onPress: async () => {
                   await signOut();
@@ -582,48 +528,48 @@ const Home = ({ navigation, route }) => {
   };
 
   const renderChat = () => (
-    <Animated.View style={[styles.chatContainer, { transform: [{ translateY: chatAnimation }] }]}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <View style={styles.chatHeader}>
-                <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                    <View style={styles.chatBotAvatar}><Icon name="smart-toy" size={24} color={theme.colors.white} /></View>
-                    <View>
-                        <Text style={styles.chatHeaderTitle}>{t('home.chat.botName')}</Text>
-                        <Text style={styles.chatHeaderSubtitle}>{t('home.chat.online')}</Text>
-                    </View>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <TouchableOpacity onPress={newChat} style={{ marginRight: theme.spacing.md }}>
-                    <Icon name="chat" size={24} color={theme.colors.white} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={toggleChat}><Icon name="keyboard-arrow-down" size={32} color={theme.colors.white} /></TouchableOpacity>
-                </View>
+    <Animated.View style={[styles.chatContainer, { transform: [{ translateY: chatAnimation }], backgroundColor: theme.colors.surface }]}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={[styles.chatHeader, { backgroundColor: theme.colors.primary }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={styles.chatBotAvatar}><Icon name="smart-toy" size={24} color={theme.colors.white} /></View>
+            <View>
+              <Text style={[styles.chatHeaderTitle, { color: theme.colors.white }]}>{t('home.chat.botName')}</Text>
+              <Text style={[styles.chatHeaderSubtitle, { color: `${theme.colors.white}99` }]}>{t('home.chat.online')}</Text>
             </View>
-            <FlatList
-                data={chatMessages}
-                keyExtractor={(item) => item.id.toString()}
-                style={styles.chatMessages}
-                contentContainerStyle={{ paddingVertical: theme.spacing.md }}
-                renderItem={({ item }) => (
-                    <View style={[styles.messageContainer, item.isBot ? styles.botMessage : styles.userMessage]}>
-                        <Text style={[styles.messageText, item.isBot ? {} : { color: theme.colors.white }]}>{item.text}</Text>
-                    </View>
-                )}
-            />
-            <View style={styles.chatInputContainer}>
-                <TextInput
-                    style={styles.chatInput}
-                    placeholder={t('home.chat.inputPlaceholder')}
-                    placeholderTextColor={theme.colors.subtleText}
-                    value={chatMessage}
-                    onChangeText={setChatMessage}
-                    multiline
-                />
-                <TouchableOpacity style={[styles.chatSendButton, !chatMessage.trim() && { opacity: 0.5 }]} onPress={sendMessage} disabled={!chatMessage.trim()}>
-                    <Icon name="send" size={22} color={theme.colors.white} />
-                </TouchableOpacity>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity onPress={newChat} style={{ marginRight: theme.spacing.md }}>
+              <Icon name="chat" size={24} color={theme.colors.white} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={toggleChat}><Icon name="keyboard-arrow-down" size={32} color={theme.colors.white} /></TouchableOpacity>
+          </View>
+        </View>
+        <FlatList
+          data={chatMessages}
+          keyExtractor={(item) => item.id.toString()}
+          style={styles.chatMessages}
+          contentContainerStyle={{ paddingVertical: theme.spacing.md }}
+          renderItem={({ item }) => (
+            <View style={[styles.messageContainer, item.isBot ? [styles.botMessage, { backgroundColor: theme.colors.background }] : [styles.userMessage, { backgroundColor: theme.colors.primary }]]}>
+              <Text style={[styles.messageText, { color: item.isBot ? theme.colors.text : theme.colors.white }]}>{item.text}</Text>
             </View>
-        </KeyboardAvoidingView>
+          )}
+        />
+        <View style={[styles.chatInputContainer, { borderTopColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+          <TextInput
+            style={[styles.chatInput, { backgroundColor: theme.colors.background, color: theme.colors.text }]}
+            placeholder={t('home.chat.inputPlaceholder')}
+            placeholderTextColor={theme.colors.subtleText}
+            value={chatMessage}
+            onChangeText={setChatMessage}
+            multiline
+          />
+          <TouchableOpacity style={[styles.chatSendButton, { backgroundColor: theme.colors.primary }, !chatMessage.trim() && { opacity: 0.5 }]} onPress={sendMessage} disabled={!chatMessage.trim()}>
+            <Icon name="send" size={22} color={theme.colors.white} />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </Animated.View>
   );
 
@@ -633,19 +579,19 @@ const Home = ({ navigation, route }) => {
     const currentExpenses = isToday ? summary.todayExpenses : summary.overallExpenses;
     const previousIncome = isToday ? summary.yesterdayIncome : summary.prevTotalIncome;
     const previousExpenses = isToday ? summary.yesterdayExpenses : summary.prevTotalExpenses;
-    
+
     const incomeChange = calculatePercentageChange(currentIncome, previousIncome);
     const expenseChange = calculatePercentageChange(currentExpenses, previousExpenses);
-    
+
     return (
       <View style={styles.summaryContainer}>
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { x: summaryScrollX } } }],
-            { 
+            {
               useNativeDriver: false,
               listener: (event) => {
                 const index = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
@@ -658,31 +604,29 @@ const Home = ({ navigation, route }) => {
           {/* Today's Summary */}
           <View style={[styles.summaryPage, { width: screenWidth }]}>
             <View style={styles.summaryRow}>
-              <View style={[styles.summaryCard, theme.shadow]}>
+              <View style={[styles.summaryCard, theme.shadow, { backgroundColor: theme.colors.surface }]}>
                 <View style={styles.summaryHeader}>
-                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.success}20`}]}>
+                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.success}20` }]}>
                     <Icon name="trending-up" size={24} color={theme.colors.success} />
                   </View>
                   <Text style={[styles.summaryGrowth, { color: incomeChange >= 0 ? theme.colors.success : theme.colors.danger }]}>
                     {incomeChange >= 0 ? '+' : ''}{incomeChange.toFixed(1)}%
                   </Text>
                 </View>
-                <Text style={styles.summaryValue}>₹{Number(summary.todayIncome).toLocaleString('en-IN')}</Text>
-                <Text style={styles.summaryLabel}>{t('home.todaysSales')}</Text>
-                {/* REMOVED: Comparison text to ensure consistent card size */}
+                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>₹{Number(summary.todayIncome).toLocaleString('en-IN')}</Text>
+                <Text style={[styles.summaryLabel, { color: theme.colors.subtleText }]}>{t('home.todaysSales')}</Text>
               </View>
-              <View style={[styles.summaryCard, theme.shadow, { marginLeft: theme.spacing.md }]}>
+              <View style={[styles.summaryCard, theme.shadow, { marginLeft: theme.spacing.md, backgroundColor: theme.colors.surface }]}>
                 <View style={styles.summaryHeader}>
-                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.danger}20`}]}>
+                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.danger}20` }]}>
                     <Icon name="trending-down" size={24} color={theme.colors.danger} />
                   </View>
                   <Text style={[styles.summaryGrowth, { color: expenseChange <= 0 ? theme.colors.success : theme.colors.danger }]}>
                     {expenseChange >= 0 ? '+' : ''}{expenseChange.toFixed(1)}%
                   </Text>
                 </View>
-                <Text style={styles.summaryValue}>₹{Number(summary.todayExpenses).toLocaleString('en-IN')}</Text>
-                <Text style={styles.summaryLabel}>{t('home.todaysExpenses')}</Text>
-                {/* REMOVED: Comparison text to ensure consistent card size */}
+                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>₹{Number(summary.todayExpenses).toLocaleString('en-IN')}</Text>
+                <Text style={[styles.summaryLabel, { color: theme.colors.subtleText }]}>{t('home.todaysExpenses')}</Text>
               </View>
             </View>
           </View>
@@ -690,61 +634,61 @@ const Home = ({ navigation, route }) => {
           {/* Overall Summary */}
           <View style={[styles.summaryPage, { width: screenWidth }]}>
             <View style={styles.summaryRow}>
-              <View style={[styles.summaryCard, theme.shadow]}>
+              <View style={[styles.summaryCard, theme.shadow, { backgroundColor: theme.colors.surface }]}>
                 <View style={styles.summaryHeader}>
-                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.success}20`}]}>
+                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.success}20` }]}>
                     <Icon name="trending-up" size={24} color={theme.colors.success} />
                   </View>
                   <Text style={[styles.summaryGrowth, { color: incomeChange >= 0 ? theme.colors.success : theme.colors.danger }]}>
                     {incomeChange >= 0 ? '+' : ''}{incomeChange.toFixed(1)}%
                   </Text>
                 </View>
-                <Text style={styles.summaryValue}>₹{Number(summary.overallIncome).toLocaleString('en-IN')}</Text>
-                <Text style={styles.summaryLabel}>Overall Sales</Text>
-                 {/* REMOVED: Comparison text to ensure consistent card size */}
+                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>₹{Number(summary.overallIncome).toLocaleString('en-IN')}</Text>
+                <Text style={[styles.summaryLabel, { color: theme.colors.subtleText }]}>Overall Sales</Text>
               </View>
-              <View style={[styles.summaryCard, theme.shadow, { marginLeft: theme.spacing.md }]}>
+              <View style={[styles.summaryCard, theme.shadow, { marginLeft: theme.spacing.md, backgroundColor: theme.colors.surface }]}>
                 <View style={styles.summaryHeader}>
-                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.danger}20`}]}>
+                  <View style={[styles.summaryIconContainer, { backgroundColor: `${theme.colors.danger}20` }]}>
                     <Icon name="trending-down" size={24} color={theme.colors.danger} />
                   </View>
                   <Text style={[styles.summaryGrowth, { color: expenseChange <= 0 ? theme.colors.success : theme.colors.danger }]}>
                     {expenseChange >= 0 ? '+' : ''}{expenseChange.toFixed(1)}%
                   </Text>
                 </View>
-                <Text style={styles.summaryValue}>₹{Number(summary.overallExpenses).toLocaleString('en-IN')}</Text>
-                <Text style={styles.summaryLabel}>Overall Expenses</Text>
-                 {/* REMOVED: Comparison text to ensure consistent card size */}
+                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>₹{Number(summary.overallExpenses).toLocaleString('en-IN')}</Text>
+                <Text style={[styles.summaryLabel, { color: theme.colors.subtleText }]}>Overall Expenses</Text>
               </View>
             </View>
           </View>
         </ScrollView>
-        
+
         {/* Page Indicators */}
         <View style={styles.summaryIndicators}>
-          <Animated.View 
+          <Animated.View
             style={[
-              styles.summaryIndicator, 
-              { 
+              styles.summaryIndicator,
+              {
+                backgroundColor: theme.colors.primary,
                 opacity: summaryScrollX.interpolate({
                   inputRange: [0, screenWidth],
                   outputRange: [1, 0.3],
                   extrapolate: 'clamp',
                 })
               }
-            ]} 
+            ]}
           />
-          <Animated.View 
+          <Animated.View
             style={[
-              styles.summaryIndicator, 
-              { 
+              styles.summaryIndicator,
+              {
+                backgroundColor: theme.colors.primary,
                 opacity: summaryScrollX.interpolate({
                   inputRange: [0, screenWidth],
                   outputRange: [0.3, 1],
                   extrapolate: 'clamp',
                 })
               }
-            ]} 
+            ]}
           />
         </View>
       </View>
@@ -752,27 +696,27 @@ const Home = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
-      
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={theme.dark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
+
       {sidebarVisible && <TouchableOpacity style={styles.overlay} onPress={toggleSidebar} activeOpacity={1} />}
       {renderSidebar()}
-      
+
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={toggleSidebar} style={styles.headerButton}>
           <Icon name="menu" size={28} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('home.headerTitle')}</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>kaaro</Text>
         <View style={{ flexDirection: 'row' }}>
-          <TouchableOpacity 
-            style={styles.headerButton} 
+          <TouchableOpacity
+            style={styles.headerButton}
             onPress={() => navigation.navigate('NotificationScreen')}
           >
             <Icon name="notifications" size={28} color={theme.colors.text} />
             {unreadNotificationCount > 0 && (
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>{unreadNotificationCount}</Text>
+              <View style={[styles.notificationBadge, { backgroundColor: theme.colors.danger, borderColor: theme.colors.background }]}>
+                <Text style={[styles.notificationBadgeText, { color: theme.colors.white }]}>{unreadNotificationCount}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -781,10 +725,10 @@ const Home = ({ navigation, route }) => {
 
       <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
-          <Text style={theme.typography.h1}>
+          <Text style={[theme.typography.h1, { color: theme.colors.text }]}>
             Good Morning {business?.name?.trim().split(' ')[0] || 'User'}!
           </Text>
-          <Text style={theme.typography.body}>{t('home.overview')}</Text>
+          <Text style={[theme.typography.body, { color: theme.colors.subtleText }]}>{t('home.overview')}</Text>
         </View>
 
         {/* SUMMARY CARDS */}
@@ -792,66 +736,86 @@ const Home = ({ navigation, route }) => {
 
         {/* QUICK ACTIONS */}
         <View style={styles.section}>
-            <Text style={theme.typography.h2}>{t('home.quickActions')}</Text>
-            <View style={styles.quickActionsRow}>
-                {quickActions.map(item => (
-                    <TouchableOpacity 
-                      key={item.title} 
-                      style={styles.quickAction}
-                      onPress={item.action}
-                      activeOpacity={0.7}
-                    >
-                        <View style={styles.quickActionIconContainer}>
-                            <Icon name={item.icon} size={28} color={theme.colors.primary} />
-                        </View>
-                        <Text style={styles.quickActionLabel}>{item.title}</Text>
-                    </TouchableOpacity>
-                ))}
-            </View>
+          <Text style={[theme.typography.h2, { color: theme.colors.text }]}>{t('home.quickActions')}</Text>
+          <View style={styles.quickActionsRow}>
+            {quickActions.map(item => (
+              <TouchableOpacity
+                key={item.title}
+                style={styles.quickAction}
+                onPress={item.action}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.quickActionIconContainer, { backgroundColor: theme.colors.surface }, theme.shadow]}>
+                  <Icon name={item.icon} size={28} color={theme.colors.primary} />
+                </View>
+                <Text style={[styles.quickActionLabel, { color: theme.colors.text }]}>{item.title}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
-        
+
         {/* ACTIVITY FEED */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={theme.typography.h2}>{t('home.activityFeed')}</Text>
+            <Text style={[theme.typography.h2, { color: theme.colors.text }]}>{t('home.activityFeed')}</Text>
             <TouchableOpacity onPress={() => navigation.navigate('LedgerScreen')}>
-              <Text style={styles.viewAllText}>View All</Text>
+              <Text style={[styles.viewAllText, { color: theme.colors.primary }]}>View All</Text>
             </TouchableOpacity>
           </View>
-          <View style={[styles.card, { paddingVertical: theme.spacing.sm }]}>
+          <View style={[styles.card, { paddingVertical: theme.spacing.sm, backgroundColor: theme.colors.surface }, theme.shadow]}>
             {activityData.length > 0 ? (
               <FlatList
                 data={activityData}
                 keyExtractor={(item) => item.id}
                 renderItem={renderActivityItem}
-                ItemSeparatorComponent={() => <View style={styles.divider} />}
+                ItemSeparatorComponent={() => <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />}
                 scrollEnabled={false}
               />
             ) : (
               <View style={styles.emptyState}>
                 <Icon name="assessment" size={48} color={theme.colors.subtleText} />
-                <Text style={styles.emptyStateText}>No recent activity</Text>
-                <Text style={styles.emptyStateSubtext}>Start by adding your first transaction</Text>
+                <Text style={[styles.emptyStateText, { color: theme.colors.text }]}>No recent activity</Text>
+                <Text style={[styles.emptyStateSubtext, { color: theme.colors.subtleText }]}>Start by adding your first transaction</Text>
               </View>
             )}
           </View>
         </View>
-        
+
       </ScrollView>
 
       {/* FLOATING ACTION BUTTON */}
       <Animated.View style={[styles.fabContainer, { opacity: fabAnimation, transform: [{ scale: fabAnimation }] }]}>
-        <TouchableOpacity style={[styles.fab, theme.shadow]} onPress={toggleChat}>
+        <Animated.View
+          style={[
+            styles.fabPulse,
+            {
+              backgroundColor: theme.colors.primary,
+              transform: [
+                {
+                  scale: pulseAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 1.5],
+                  }),
+                },
+              ],
+              opacity: pulseAnimation.interpolate({
+                inputRange: [0, 0.5, 1],
+                outputRange: [0.3, 0.5, 0],
+              }),
+            },
+          ]}
+        />
+        <TouchableOpacity style={[styles.fab, { backgroundColor: theme.colors.primary }, theme.shadow]} onPress={toggleChat}>
           <Icon name="smart-toy" size={32} color={theme.colors.white} />
         </TouchableOpacity>
       </Animated.View>
 
       {/* BOTTOM NAVIGATION */}
-      <View style={styles.bottomNav}>
+      <View style={[styles.bottomNav, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
         {bottomNavItems.map((item) => (
-          <TouchableOpacity 
-            key={item.route} 
-            style={styles.bottomNavItem} 
+          <TouchableOpacity
+            key={item.route}
+            style={styles.bottomNavItem}
             onPress={() => {
               setSelectedTab(item.route);
               if (item.route !== 'Home') {
@@ -860,157 +824,146 @@ const Home = ({ navigation, route }) => {
             }}
           >
             <Icon name={item.icon} size={28} color={selectedTab === item.route ? theme.colors.primary : theme.colors.subtleText} />
-            <Text style={[styles.bottomNavText, selectedTab === item.route && styles.bottomNavTextActive]}>{item.label}</Text>
+            <Text style={[styles.bottomNavText, { color: theme.colors.subtleText }, selectedTab === item.route && { color: theme.colors.primary }]}>{item.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
-      
-      {/* CHAT INTERFACE (must be last for z-index) */}
+
+      {/* CHAT INTERFACE */}
       {renderChat()}
     </SafeAreaView>
   );
 };
 
-// MASTER STYLESHEET using the Design System
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: Platform.OS === 'ios' ? theme.spacing.sm : theme.spacing.lg,
-    paddingBottom: theme.spacing.md,
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 8 : 24,
+    paddingBottom: 16,
   },
-  headerButton: { padding: theme.spacing.sm },
-  headerTitle: { fontFamily: 'Poppins-Bold', fontSize: 24, color: theme.colors.primary, marginLeft: 0 },
+  headerButton: { padding: 8 },
+  headerTitle: { fontFamily: 'Pacifico-Regular', fontSize: 28 },
   notificationBadge: {
     position: 'absolute',
     top: 4,
     right: 4,
-    backgroundColor: theme.colors.danger,
     minWidth: 20,
     height: 20,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: theme.colors.background,
     paddingHorizontal: 4,
   },
-  notificationBadgeText: { color: theme.colors.white, fontSize: 10, fontFamily: 'Poppins-Bold' },
+  notificationBadgeText: { fontSize: 10, fontFamily: 'Poppins-Bold' },
   mainContent: { flex: 1 },
-  section: { paddingHorizontal: theme.spacing.lg, marginBottom: theme.spacing.xl },
+  section: { paddingHorizontal: 24, marginBottom: 32 },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.md,
+    marginBottom: 16,
   },
   viewAllText: {
-    ...theme.typography.label,
-    color: theme.colors.primary,
     fontFamily: 'Poppins-SemiBold',
+    fontSize: 12,
   },
-  card: { backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, padding: theme.spacing.lg, ...theme.shadow },
-
-  // Summary
-  summaryContainer: { marginBottom: theme.spacing.xl, },
-  summaryPage: { paddingHorizontal: theme.spacing.lg },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between',marginBottom: theme.spacing.md },
-  summaryCard: { flex: 1, backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, padding: theme.spacing.lg,height: 175 },
-  summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm },
-  summaryIconContainer: { width: 44, height: 44, borderRadius: theme.borderRadius.full, justifyContent: 'center', alignItems: 'center' },
-  summaryValue: { ...theme.typography.h1, fontSize: 24, marginVertical: theme.spacing.xs },
-  summaryLabel: { ...theme.typography.subtext },
-  summaryGrowth: { ...theme.typography.label, fontFamily: 'Poppins-SemiBold' },
-  // REMOVED: summaryCompareText style is no longer needed but kept here for reference if you want to add it back.
-  summaryCompareText: { 
-    ...theme.typography.label, 
-    fontSize: 10, 
-    color: theme.colors.subtleText, 
-    marginTop: theme.spacing.xs 
+  card: { borderRadius: 16, padding: 24 },
+  summaryContainer: { marginBottom: 32, },
+  summaryPage: { paddingHorizontal: 24 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  summaryCard: { flex: 1, borderRadius: 16, padding: 24, height: 175 },
+  summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  summaryIconContainer: { width: 44, height: 44, borderRadius: 999, justifyContent: 'center', alignItems: 'center' },
+  summaryValue: { fontFamily: 'Poppins-Bold', fontSize: 24, marginVertical: 4 },
+  summaryLabel: { fontFamily: 'Poppins-Regular', fontSize: 14 },
+  summaryGrowth: { fontFamily: 'Poppins-SemiBold', fontSize: 12 },
+  summaryCompareText: {
+    fontSize: 10,
+    marginTop: 4
   },
-  summaryIndicators: { 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginTop: theme.spacing.md, 
-    gap: theme.spacing.sm 
+  summaryIndicators: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+    gap: 8
   },
-  summaryIndicator: { 
-    width: 8, 
-    height: 8, 
-    borderRadius: 4, 
-    backgroundColor: theme.colors.primary 
+  summaryIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  
-  // Quick Actions
-  quickActionsRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: theme.spacing.md },
+  quickActionsRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 16 },
   quickAction: { alignItems: 'center' },
-  quickActionIconContainer: { width: 64, height: 64, borderRadius: theme.borderRadius.full, backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center', marginBottom: theme.spacing.sm, ...theme.shadow },
-  quickActionLabel: { ...theme.typography.label, color: theme.colors.text },
-
-  // Activity
-  activityItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: theme.spacing.md },
-  activityIconContainer: { width: 40, height: 40, borderRadius: theme.borderRadius.full, justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
+  quickActionIconContainer: { width: 64, height: 64, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  quickActionLabel: { fontFamily: 'Poppins-Medium', fontSize: 12 },
+  activityItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16 },
+  activityIconContainer: { width: 40, height: 40, borderRadius: 999, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   activityContent: { flex: 1 },
-  activityTitle: { ...theme.typography.body, color: theme.colors.text, fontSize: 15, fontFamily: 'Poppins-Medium' },
+  activityTitle: { fontSize: 15, fontFamily: 'Poppins-Medium' },
   activityMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  activityCategory: { 
-    ...theme.typography.label, 
-    fontSize: 11, 
-    color: theme.colors.primary,
-    backgroundColor: `${theme.colors.primary}15`,
+  activityCategory: {
+    fontSize: 11,
+    fontFamily: 'Poppins-Medium',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    marginRight: theme.spacing.sm,
+    marginRight: 8,
   },
-  activityTime: { ...theme.typography.subtext, fontSize: 11 },
+  activityTime: { fontFamily: 'Poppins-Regular', fontSize: 11 },
   activityAmount: { fontFamily: 'Poppins-SemiBold', fontSize: 15 },
-  divider: { height: 1, backgroundColor: theme.colors.border, marginHorizontal: theme.spacing.lg },
+  divider: { height: 1, marginHorizontal: 24 },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: theme.spacing.xl,
+    paddingVertical: 32,
   },
   emptyStateText: {
-    ...theme.typography.body,
-    color: theme.colors.text,
-    marginTop: theme.spacing.md,
+    marginTop: 16,
     fontFamily: 'Poppins-Medium',
+    fontSize: 16,
   },
   emptyStateSubtext: {
-    ...theme.typography.subtext,
     textAlign: 'center',
-    marginTop: theme.spacing.xs,
+    marginTop: 4,
+    fontFamily: 'Poppins-Regular',
+    fontSize: 14,
   },
-
-  // FAB
-  fabContainer: { position: 'absolute', bottom: 100, right: theme.spacing.lg, zIndex: 1000 },
-  fab: {
+  fabContainer: {
+    position: 'absolute',
+    bottom: 100,
+    right: 24,
+    zIndex: 1000,
     width: 64,
     height: 64,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  // Bottom Nav
+  fab: {
+    width: 64,
+    height: 64,
+    borderRadius: 999,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fabPulse: {
+    position: 'absolute',
+    width: 64,
+    height: 64,
+    borderRadius: 999,
+  },
   bottomNav: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.surface,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    paddingVertical: theme.spacing.sm,
-    paddingBottom: Platform.OS === 'ios' ? theme.spacing.lg : theme.spacing.sm,
+    paddingVertical: 8,
+    paddingBottom: 21,
   },
   bottomNavItem: { flex: 1, alignItems: 'center' },
-  bottomNavText: { ...theme.typography.label, marginTop: theme.spacing.xs },
-  bottomNavTextActive: { color: theme.colors.primary },
-
-  // Overlay & Sidebar
+  bottomNavText: { fontFamily: 'Poppins-Medium', fontSize: 12, marginTop: 4 },
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 998 },
   sidebar: {
     position: 'absolute',
@@ -1018,76 +971,67 @@ const styles = StyleSheet.create({
     left: 0,
     bottom: 0,
     width: 350,
-    backgroundColor: theme.colors.background,
     zIndex: 999,
-    paddingBottom: theme.spacing.lg,
+    paddingBottom: 24,
   },
   sidebarHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: 24,
     paddingTop: 60,
-    paddingBottom: theme.spacing.lg,
+    paddingBottom: 24,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
   },
   profileAvatar: {
     width: 48,
     height: 48,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.primary,
+    borderRadius: 999,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: theme.spacing.md,
+    marginRight: 16,
   },
-  profileInitial: { color: theme.colors.white, fontSize: 18, fontFamily: 'Poppins-Bold' },
-  profileName: { ...theme.typography.h2, fontSize: 18, color: theme.colors.text },
-  profileEmail: { ...theme.typography.subtext },
-  sidebarClose: { position: 'absolute', top: 60, right: theme.spacing.md, padding: theme.spacing.sm },
-  sidebarItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md },
-  sidebarItemText: { ...theme.typography.body, color: theme.colors.text, marginLeft: theme.spacing.lg },
+  profileInitial: { fontSize: 18, fontFamily: 'Poppins-Bold' },
+  profileName: { fontSize: 18, fontFamily: 'Poppins-SemiBold' },
+  profileEmail: { fontFamily: 'Poppins-Regular', fontSize: 14 },
+  sidebarClose: { position: 'absolute', top: 60, right: 16, padding: 8 },
+  sidebarItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16 },
+  sidebarItemText: { fontFamily: 'Poppins-Regular', fontSize: 16, marginLeft: 24 },
   sidebarLogout: { marginTop: 'auto' },
-
-  // Chat Interface
-  chatContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: theme.colors.surface, zIndex: 1001, transform: [{ translateY: screenHeight }] },
+  chatContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1001, transform: [{ translateY: screenHeight }] },
   chatHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingHorizontal: theme.spacing.lg,
-      paddingTop: Platform.OS === 'ios' ? 60 : 40,
-      paddingBottom: theme.spacing.md,
-      backgroundColor: theme.colors.primary,
-      borderBottomLeftRadius: theme.borderRadius.lg,
-      borderBottomRightRadius: theme.borderRadius.lg,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
-  chatBotAvatar: { width: 40, height: 40, borderRadius: theme.borderRadius.full, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
-  chatHeaderTitle: { ...theme.typography.h2, color: theme.colors.white },
-  chatHeaderSubtitle: { ...theme.typography.subtext, color: `${theme.colors.white}99` },
-  chatMessages: { flex: 1, paddingHorizontal: theme.spacing.lg },
-  messageContainer: { maxWidth: '85%', marginBottom: theme.spacing.md, padding: theme.spacing.md, borderRadius: theme.borderRadius.md },
-  botMessage: { alignSelf: 'flex-start', backgroundColor: theme.colors.background, borderTopLeftRadius: theme.borderRadius.sm },
-  userMessage: { alignSelf: 'flex-end', backgroundColor: theme.colors.primary, borderTopRightRadius: theme.borderRadius.sm },
-  messageText: { ...theme.typography.body, lineHeight: 24, color: theme.colors.text },
+  chatBotAvatar: { width: 40, height: 40, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  chatHeaderTitle: { fontFamily: 'Poppins-SemiBold', fontSize: 20 },
+  chatHeaderSubtitle: { fontFamily: 'Poppins-Regular', fontSize: 14 },
+  chatMessages: { flex: 1, paddingHorizontal: 24 },
+  messageContainer: { maxWidth: '85%', marginBottom: 16, padding: 16, borderRadius: 16 },
+  botMessage: { alignSelf: 'flex-start', borderTopLeftRadius: 8 },
+  userMessage: { alignSelf: 'flex-end', borderTopRightRadius: 8 },
+  messageText: { fontFamily: 'Poppins-Regular', fontSize: 16, lineHeight: 24 },
   chatInputContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: theme.spacing.md,
-      borderTopWidth: 1,
-      borderTopColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderTopWidth: 1,
   },
   chatInput: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-      borderRadius: theme.borderRadius.full,
-      paddingHorizontal: theme.spacing.lg,
-      paddingVertical: theme.spacing.md,
-      ...theme.typography.body,
-      color: theme.colors.text,
-      marginRight: theme.spacing.md,
+    flex: 1,
+    borderRadius: 999,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    fontFamily: 'Poppins-Regular',
+    fontSize: 16,
+    marginRight: 16,
   },
-  chatSendButton: { width: 48, height: 48, borderRadius: theme.borderRadius.full, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' },
+  chatSendButton: { width: 48, height: 48, borderRadius: 999, justifyContent: 'center', alignItems: 'center' },
 });
 
 export default Home;
