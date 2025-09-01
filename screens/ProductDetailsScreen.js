@@ -1,9 +1,9 @@
 /**
  * ProductDetailsScreen.js
- * Detailed view of a specific product with options to edit stock, view history, etc.
+ * Enhanced version with automatic image fetching
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,45 +14,17 @@ import {
   Alert,
   Image,
   TextInput,
+  StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
 import { updateProduct } from '../lib/db';
-
-const theme = {
-  colors: {
-    primary: '#4A69E2',
-    background: '#F7F8FC',
-    surface: '#FFFFFF',
-    text: '#121212',
-    subtleText: '#6E717A',
-    success: '#2E7D32',
-    danger: '#C62828',
-    warning: '#FFAB00',
-    border: '#E8E9F1',
-    white: '#FFFFFF',
-  },
-  spacing: {
-    xs: 4, sm: 8, md: 16, lg: 24, xl: 32,
-  },
-  typography: {
-    h1: { fontFamily: 'Poppins-Bold', fontSize: 28, color: '#121212' },
-    h2: { fontFamily: 'Poppins-SemiBold', fontSize: 20, color: '#121212' },
-    body: { fontFamily: 'Poppins-Regular', fontSize: 16, color: '#6E717A' },
-    subtext: { fontFamily: 'Poppins-Regular', fontSize: 14, color: '#6E717A' },
-    label: { fontFamily: 'Poppins-Medium', fontSize: 12, color: '#6E717A' },
-  },
-  borderRadius: { sm: 8, md: 16, lg: 24, full: 999 },
-  shadow: {
-    shadowColor: '#4A69E2',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-};
+import { useTheme } from '../context/ThemeContext';
+import ProductImageService from '../services/ProductImageService'; // Import our service
 
 const ProductDetailsScreen = ({ navigation, route }) => {
+  const { theme } = useTheme();
   const { t } = useI18n();
   const { product } = route.params || {
     product: {
@@ -60,7 +32,7 @@ const ProductDetailsScreen = ({ navigation, route }) => {
       name: 'Sample Product',
       category: 'Food',
       stock: 100,
-      image: 'https://images.pexels.com/photos/102104/pexels-photo-102104.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+      image: null, // Start with no image to trigger fetching
       price: 25.99,
       supplier: 'Fresh Foods Ltd.',
       lastUpdated: '2025-08-15',
@@ -69,6 +41,79 @@ const ProductDetailsScreen = ({ navigation, route }) => {
 
   const [editingStock, setEditingStock] = useState(false);
   const [newStock, setNewStock] = useState(String(product.quantity ?? product.stock ?? 0));
+  const [productImage, setProductImage] = useState(product.image);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  // Fetch product image on component mount
+  useEffect(() => {
+    fetchProductImage();
+  }, [product.name, product.category]);
+
+  const fetchProductImage = async () => {
+    // If we already have an image and it's not a placeholder, don't fetch
+    if (productImage && !productImage.includes('placeholder') && !imageError) {
+      return;
+    }
+
+    setImageLoading(true);
+    setImageError(false);
+
+    try {
+      console.log(`Fetching image for product: ${product.name}`);
+      
+      const fetchedImageUrl = await ProductImageService.fetchProductImage(
+        product.name, 
+        product.category || ''
+      );
+
+      if (fetchedImageUrl) {
+        // Validate the image URL before setting it
+        const isValid = await ProductImageService.validateImageUrl(fetchedImageUrl);
+        
+        if (isValid) {
+          setProductImage(fetchedImageUrl);
+          
+          // Optionally update the product in the database with the new image
+          await updateProductImage(fetchedImageUrl);
+        } else {
+          throw new Error('Image URL not accessible');
+        }
+      } else {
+        throw new Error('No image found');
+      }
+      
+    } catch (error) {
+      console.error('Failed to fetch product image:', error);
+      setImageError(true);
+      // Set a category-based default image
+      const defaultImg = ProductImageService.getDefaultImage(product.category || '');
+      setProductImage(defaultImg);
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
+  const updateProductImage = async (imageUrl) => {
+    try {
+      await updateProduct(product.id, { image: imageUrl });
+      console.log('Product image updated in database');
+    } catch (error) {
+      console.error('Failed to update product image in database:', error);
+    }
+  };
+
+  const handleImageError = () => {
+    setImageError(true);
+    // Try to fetch a new image
+    fetchProductImage();
+  };
+
+  const handleRefreshImage = () => {
+    setProductImage(null);
+    setImageError(false);
+    fetchProductImage();
+  };
 
   const getStockStatusColor = (stock) => {
     if (stock < 20) return theme.colors.danger;
@@ -98,20 +143,64 @@ const ProductDetailsScreen = ({ navigation, route }) => {
             }
             Alert.alert(t('productDetails.successTitle'), t('productDetails.successBody'));
             setEditingStock(false);
+            route.params.product.stock = updatedStock;
+            route.params.product.quantity = updatedStock;
           },
         },
       ]
     );
   };
 
+  const renderProductImage = () => {
+    if (imageLoading) {
+      return (
+        <View style={[styles.productImage, styles.imageLoadingContainer, { backgroundColor: theme.colors.border }]}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.subtleText }]}>
+            Fetching image...
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.imageContainer}>
+        <Image 
+          source={{ uri: productImage || 'https://via.placeholder.com/300x200' }} 
+          style={[styles.productImage, { backgroundColor: theme.colors.border }]}
+          onError={handleImageError}
+        />
+        
+        {/* Image refresh button */}
+        <TouchableOpacity 
+          style={[styles.refreshImageButton, { backgroundColor: theme.colors.surface }]}
+          onPress={handleRefreshImage}
+        >
+          <Icon name="refresh" size={20} color={theme.colors.primary} />
+        </TouchableOpacity>
+        
+        {imageError && (
+          <View style={[styles.imageErrorOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
+            <Icon name="broken-image" size={32} color={theme.colors.white} />
+            <Text style={[styles.imageErrorText, { color: theme.colors.white }]}>
+              Image failed to load
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={theme.dark ? "light-content" : "dark-content"} backgroundColor={theme.colors.surface} />
+      
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('productDetails.title')}</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>{t('productDetails.title')}</Text>
         <TouchableOpacity style={styles.editButton}>
           <Icon name="edit" size={24} color={theme.colors.primary} />
         </TouchableOpacity>
@@ -119,11 +208,12 @@ const ProductDetailsScreen = ({ navigation, route }) => {
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Product Image and Basic Info */}
-        <View style={styles.productCard}>
-          <Image source={{ uri: product.image || 'https://via.placeholder.com/300x200' }} style={styles.productImage} />
+        <View style={[styles.productCard, { backgroundColor: theme.colors.surface }, theme.shadow]}>
+          {renderProductImage()}
+          
           <View style={styles.productInfo}>
-            <Text style={styles.productName}>{product.name}</Text>
-            <Text style={styles.productCategory}>{product.category}</Text>
+            <Text style={[styles.productName, { color: theme.colors.text }]}>{product.name}</Text>
+            <Text style={[styles.productCategory, { color: theme.colors.subtleText }]}>{product.category}</Text>
             <View style={styles.stockContainer}>
               <Text style={[styles.stockText, { color: getStockStatusColor(product.quantity ?? product.stock ?? 0) }]}> 
                 {t('productDetails.inStock', { count: product.quantity ?? product.stock ?? 0 })}
@@ -140,74 +230,93 @@ const ProductDetailsScreen = ({ navigation, route }) => {
 
         {/* Stock Update Section */}
         {editingStock && (
-          <View style={styles.editStockCard}>
-            <Text style={styles.sectionTitle}>{t('productDetails.updateStockTitle')}</Text>
+          <View style={[styles.editStockCard, { backgroundColor: theme.colors.surface }, theme.shadow]}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('productDetails.updateStockTitle')}</Text>
             <View style={styles.stockEditRow}>
               <TextInput
-                style={styles.stockInput}
+                style={[styles.stockInput, { borderColor: theme.colors.border, color: theme.colors.text }]}
                 value={newStock}
                 onChangeText={setNewStock}
                 keyboardType="numeric"
                 placeholder={t('productDetails.updateStockTitle')}
+                placeholderTextColor={theme.colors.subtleText}
               />
-              <TouchableOpacity style={styles.updateButton} onPress={handleUpdateStock}>
-                <Text style={styles.updateButtonText}>{t('productDetails.update')}</Text>
+              <TouchableOpacity style={[styles.updateButton, { backgroundColor: theme.colors.success }]} onPress={handleUpdateStock}>
+                <Text style={[styles.updateButtonText, { color: theme.colors.white }]}>{t('productDetails.update')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.cancelButton}
+                style={[styles.cancelButton, { backgroundColor: theme.colors.subtleText }]}
                 onPress={() => {
                   setEditingStock(false);
-                   setNewStock(String(product.quantity ?? product.stock ?? 0));
+                  setNewStock(String(product.quantity ?? product.stock ?? 0));
                 }}
               >
-                <Text style={styles.cancelButtonText}>{t('productDetails.cancel')}</Text>
+                <Text style={[styles.cancelButtonText, { color: theme.colors.white }]}>{t('productDetails.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
 
         {/* Product Details */}
-        <View style={styles.detailsCard}>
-          <Text style={styles.sectionTitle}>{t('productDetails.details')}</Text>
+        <View style={[styles.detailsCard, { backgroundColor: theme.colors.surface }, theme.shadow]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('productDetails.details')}</Text>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{t('productDetails.price')}</Text>
-            <Text style={styles.detailValue}>₹{product.price}</Text>
+            <Text style={[styles.detailLabel, { color: theme.colors.subtleText }]}>{t('productDetails.price')}</Text>
+            <Text style={[styles.detailValue, { color: theme.colors.text }]}>₹{product.price}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{t('productDetails.supplier')}</Text>
-            <Text style={styles.detailValue}>{product.supplier}</Text>
+            <Text style={[styles.detailLabel, { color: theme.colors.subtleText }]}>{t('productDetails.supplier')}</Text>
+            <Text style={[styles.detailValue, { color: theme.colors.text }]}>{product.supplier}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{t('productDetails.lastUpdated')}</Text>
-            <Text style={styles.detailValue}>{product.lastUpdated}</Text>
+            <Text style={[styles.detailLabel, { color: theme.colors.subtleText }]}>{t('productDetails.lastUpdated')}</Text>
+            <Text style={[styles.detailValue, { color: theme.colors.text }]}>{product.lastUpdated}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={[styles.detailLabel, { color: theme.colors.subtleText }]}>Image Status</Text>
+            <Text style={[styles.detailValue, { color: imageError ? theme.colors.danger : theme.colors.success }]}>
+              {imageError ? 'Error' : 'Loaded'}
+            </Text>
           </View>
         </View>
 
         {/* Quick Actions */}
-        <View style={styles.actionsCard}>
-          <Text style={styles.sectionTitle}>{t('productDetails.quickActions')}</Text>
+        <View style={[styles.actionsCard, { backgroundColor: theme.colors.surface }, theme.shadow]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('productDetails.quickActions')}</Text>
+          
           <TouchableOpacity
-            style={styles.actionButton}
+            style={[styles.actionButton, { borderBottomColor: theme.colors.border }]}
+            onPress={handleRefreshImage}
+          >
+            <Icon name="image" size={24} color={theme.colors.primary} />
+            <Text style={[styles.actionText, { color: theme.colors.text }]}>Refresh Product Image</Text>
+            <Icon name="chevron-right" size={24} color={theme.colors.subtleText} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, { borderBottomColor: theme.colors.border }]}
             onPress={() => Alert.alert(t('productDetails.featureComingSoon'), '')}
           >
             <Icon name="history" size={24} color={theme.colors.primary} />
-            <Text style={styles.actionText}>{t('productDetails.viewStockHistory')}</Text>
+            <Text style={[styles.actionText, { color: theme.colors.text }]}>{t('productDetails.viewStockHistory')}</Text>
             <Icon name="chevron-right" size={24} color={theme.colors.subtleText} />
           </TouchableOpacity>
+          
           <TouchableOpacity
-            style={styles.actionButton}
+            style={[styles.actionButton, { borderBottomColor: theme.colors.border }]}
             onPress={() => Alert.alert(t('productDetails.featureComingSoon'), '')}
           >
             <Icon name="edit" size={24} color={theme.colors.primary} />
-            <Text style={styles.actionText}>{t('productDetails.editProductDetails')}</Text>
+            <Text style={[styles.actionText, { color: theme.colors.text }]}>{t('productDetails.editProductDetails')}</Text>
             <Icon name="chevron-right" size={24} color={theme.colors.subtleText} />
           </TouchableOpacity>
+          
           <TouchableOpacity
-            style={styles.actionButton}
+            style={[styles.actionButton, { borderBottomWidth: 0 }]}
             onPress={() => Alert.alert(t('productDetails.featureComingSoon'), '')}
           >
             <Icon name="analytics" size={24} color={theme.colors.primary} />
-            <Text style={styles.actionText}>{t('productDetails.viewAnalytics')}</Text>
+            <Text style={[styles.actionText, { color: theme.colors.text }]}>{t('productDetails.viewAnalytics')}</Text>
             <Icon name="chevron-right" size={24} color={theme.colors.subtleText} />
           </TouchableOpacity>
         </View>
@@ -219,90 +328,113 @@ const ProductDetailsScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
   },
   backButton: {
-    padding: theme.spacing.sm,
-    marginLeft: -theme.spacing.sm,
+    padding: 8,
+    marginLeft: -8,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: theme.colors.text,
     fontFamily: 'Poppins-SemiBold',
   },
   editButton: {
-    padding: theme.spacing.sm,
-    marginRight: -theme.spacing.sm,
+    padding: 8,
+    marginRight: -8,
   },
   scrollView: {
     flex: 1,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: 24,
   },
   productCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.lg,
-    marginTop: theme.spacing.lg,
-    ...theme.shadow,
+    borderRadius: 16,
+    padding: 24,
+    marginTop: 24,
+  },
+  imageContainer: {
+    position: 'relative',
   },
   productImage: {
     width: '100%',
     height: 200,
-    borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.border,
+    borderRadius: 16,
+  },
+  imageLoadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    fontFamily: 'Poppins-Regular',
+  },
+  refreshImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    padding: 8,
+    borderRadius: 20,
+    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  imageErrorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageErrorText: {
+    marginTop: 8,
+    fontSize: 12,
+    fontFamily: 'Poppins-Regular',
+    textAlign: 'center',
   },
   productInfo: {
-    marginTop: theme.spacing.md,
+    marginTop: 16,
   },
   productName: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: theme.colors.text,
     fontFamily: 'Poppins-Bold',
   },
   productCategory: {
     fontSize: 16,
-    color: theme.colors.subtleText,
-    marginTop: theme.spacing.xs,
+    marginTop: 4,
     fontFamily: 'Poppins-Regular',
   },
   stockContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: theme.spacing.sm,
+    marginTop: 8,
   },
   stockText: {
     fontSize: 18,
-    fontWeight: '600',
     fontFamily: 'Poppins-SemiBold',
   },
   editStockButton: {
-    marginLeft: theme.spacing.sm,
-    padding: theme.spacing.xs,
+    marginLeft: 8,
+    padding: 4,
   },
   editStockCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.lg,
-    marginTop: theme.spacing.md,
-    ...theme.shadow,
+    borderRadius: 16,
+    padding: 24,
+    marginTop: 16,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: theme.colors.text,
-    marginBottom: theme.spacing.md,
+    marginBottom: 16,
     fontFamily: 'Poppins-SemiBold',
   },
   stockEditRow: {
@@ -312,82 +444,67 @@ const styles = StyleSheet.create({
   stockInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.sm,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     fontSize: 16,
-    color: theme.colors.text,
     fontFamily: 'Poppins-Regular',
   },
   updateButton: {
-    backgroundColor: theme.colors.success,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.borderRadius.sm,
-    marginLeft: theme.spacing.sm,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
   },
   updateButtonText: {
-    color: theme.colors.white,
     fontWeight: '600',
     fontFamily: 'Poppins-SemiBold',
   },
   cancelButton: {
-    backgroundColor: theme.colors.subtleText,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.borderRadius.sm,
-    marginLeft: theme.spacing.sm,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
   },
   cancelButtonText: {
-    color: theme.colors.white,
     fontWeight: '600',
     fontFamily: 'Poppins-SemiBold',
   },
   detailsCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.lg,
-    marginTop: theme.spacing.md,
-    ...theme.shadow,
+    borderRadius: 16,
+    padding: 24,
+    marginTop: 16,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.md,
+    marginBottom: 16,
   },
   detailLabel: {
     fontSize: 16,
-    color: theme.colors.subtleText,
     fontFamily: 'Poppins-Regular',
   },
   detailValue: {
     fontSize: 16,
-    color: theme.colors.text,
-    fontWeight: '600',
     fontFamily: 'Poppins-SemiBold',
   },
   actionsCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.lg,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-    ...theme.shadow,
+    borderRadius: 16,
+    padding: 24,
+    marginTop: 16,
+    marginBottom: 24,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: theme.spacing.md,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
   },
   actionText: {
     flex: 1,
     fontSize: 16,
-    color: theme.colors.text,
-    marginLeft: theme.spacing.md,
+    marginLeft: 16,
     fontFamily: 'Poppins-Regular',
   },
 });

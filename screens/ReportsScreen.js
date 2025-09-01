@@ -3,7 +3,9 @@
  * A comprehensive screen for generating, viewing, and sharing business reports.
  * Features real database integration with transactions table.
  * Adheres to the KAARO design system for a cohesive app experience.
+ * import React, { useState, useMemo } from 'react';
  */
+
 
 import React, { useState, useMemo } from 'react';
 import {
@@ -23,40 +25,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
 import { listTransactions, listProducts, sumTransactions, getOrCreateBusinessForUser } from '../lib/db';
 import { supabase } from '../lib/supabaseClient';
-
-// THEME & DESIGN SYSTEM (Consistent with other screens)
-const theme = {
-  colors: {
-    primary: '#4A69E2',
-    background: '#F7F8FC',
-    surface: '#FFFFFF',
-    text: '#121212',
-    subtleText: '#6E717A',
-    success: '#2E7D32',
-    danger: '#C62828',
-    warning: '#FFAB00',
-    border: '#E8E9F1',
-    white: '#FFFFFF',
-  },
-  spacing: {
-    xs: 4, sm: 8, md: 16, lg: 24, xl: 32,
-  },
-  typography: {
-    h1: { fontFamily: 'Poppins-Bold', fontSize: 28, color: '#121212' },
-    h2: { fontFamily: 'Poppins-SemiBold', fontSize: 20, color: '#121212' },
-    body: { fontFamily: 'Poppins-Regular', fontSize: 16, color: '#6E717A' },
-    subtext: { fontFamily: 'Poppins-Regular', fontSize: 14, color: '#6E717A' },
-    label: { fontFamily: 'Poppins-Medium', fontSize: 12, color: '#6E717A' },
-  },
-  borderRadius: { sm: 8, md: 16, lg: 24, full: 999 },
-  shadow: {
-    shadowColor: '#4A69E2',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-};
+import { useTheme } from '../context/ThemeContext'; // ADDED
 
 // REPORT CONFIG
 const REPORT_TYPES = [
@@ -72,7 +41,7 @@ const DATE_RANGES = ['today', 'thisWeek', 'thisMonth', 'custom'];
 const getDateRange = (range) => {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  
+
   switch (range) {
     case 'today':
       return {
@@ -113,17 +82,17 @@ const formatDate = (date) => {
 };
 
 const ReportsScreen = ({ navigation, businessId, route }) => {
+  const { theme } = useTheme(); // ADDED
   const { t } = useI18n();
   const [selectedReport, setSelectedReport] = useState(null);
   const [selectedDateRange, setSelectedDateRange] = useState('thisMonth');
   const [generatedReport, setGeneratedReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [currentBusiness, setCurrentBusiness] = useState(null);
+  const [selectedTab, setSelectedTab] = useState('Reports');
 
-  // Get businessId from various sources
   const currentBusinessId = businessId || route?.params?.businessId || currentBusiness?.id;
 
-  // Fetch business for current user if no businessId provided
   React.useEffect(() => {
     const fetchBusiness = async () => {
       if (!currentBusinessId) {
@@ -142,26 +111,18 @@ const ReportsScreen = ({ navigation, businessId, route }) => {
     fetchBusiness();
   }, [currentBusinessId]);
 
-  // Database query functions
   const fetchTransactionData = async (reportType, dateRange) => {
     try {
       const { start, end } = getDateRange(dateRange);
-      
-      // Get report configuration
       const reportConfig = REPORT_TYPES.find(r => r.key === reportType);
       const transactionType = reportConfig?.type;
 
-      // Use your existing db function
       const { data, error } = await listTransactions(currentBusinessId, {
         type: transactionType !== 'both' && transactionType !== 'stock' ? transactionType : undefined
       });
 
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      // Filter by date range since your db function doesn't handle date filtering
       const filteredData = (data || []).filter(transaction => {
         const transactionDate = new Date(transaction.created_at);
         return transactionDate >= start && transactionDate <= end;
@@ -177,12 +138,7 @@ const ReportsScreen = ({ navigation, businessId, route }) => {
   const fetchStockData = async () => {
     try {
       const { data, error } = await listProducts(currentBusinessId);
-
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
-      }
-
+      if (error) throw error;
       return data || [];
     } catch (error) {
       console.error('Error fetching stock data:', error);
@@ -216,16 +172,6 @@ const ReportsScreen = ({ navigation, businessId, route }) => {
     const expenseCount = transactions.length;
     const avgExpense = expenseCount > 0 ? totalExpenses / expenseCount : 0;
 
-    // Group by category
-    const categoryTotals = transactions.reduce((acc, t) => {
-      const category = t.category || 'Other';
-      acc[category] = (acc[category] || 0) + Number(t.amount);
-      return acc;
-    }, {});
-
-    const topCategory = Object.entries(categoryTotals)
-      .sort(([,a], [,b]) => b - a)[0];
-
     return {
       title: `${t('reports.types.expense')} (${t(`reports.dateRanges.${dateRange}`)})`,
       metrics: [
@@ -243,62 +189,27 @@ const ReportsScreen = ({ navigation, businessId, route }) => {
   };
 
   const generatePnLReport = async (transactions, dateRange) => {
-    try {
-      // Use your existing sumTransactions function for overall totals
-      const { data: totals, error } = await sumTransactions(currentBusinessId);
-      
-      if (error) {
-        console.error('Error fetching transaction totals:', error);
-      }
+    const income = transactions.filter(t => t.type === 'income');
+    const expenses = transactions.filter(t => t.type === 'expense');
 
-      // Filter transactions for the selected date range
-      const income = transactions.filter(t => t.type === 'income');
-      const expenses = transactions.filter(t => t.type === 'expense');
-      
-      const periodIncome = income.reduce((sum, t) => sum + Number(t.amount), 0);
-      const periodExpenses = expenses.reduce((sum, t) => sum + Number(t.amount), 0);
-      const netProfit = periodIncome - periodExpenses;
+    const periodIncome = income.reduce((sum, t) => sum + Number(t.amount), 0);
+    const periodExpenses = expenses.reduce((sum, t) => sum + Number(t.amount), 0);
+    const netProfit = periodIncome - periodExpenses;
 
-      // Use period data for the report, but show overall totals as additional context
-      return {
-        title: `${t('reports.types.pnl')} (${t(`reports.dateRanges.${dateRange}`)})`,
-        metrics: [
-          { label: t('reports.metrics.totalIncome'), value: formatCurrency(periodIncome) },
-          { label: t('reports.metrics.totalExpenses'), value: formatCurrency(periodExpenses) },
-          { label: t('reports.metrics.netProfit'), value: formatCurrency(netProfit) },
-        ],
-        tableHeaders: [t('reports.table.type'), t('reports.table.count'), t('reports.table.amount')],
-        tableData: [
-          [t('reports.types.sales'), income.length.toString(), formatCurrency(periodIncome)],
-          [t('reports.types.expense'), expenses.length.toString(), formatCurrency(periodExpenses)],
-          [t('reports.metrics.netProfit'), '', formatCurrency(netProfit)]
-        ]
-      };
-    } catch (error) {
-      console.error('Error generating P&L report:', error);
-      // Fallback to basic calculation
-      const income = transactions.filter(t => t.type === 'income');
-      const expenses = transactions.filter(t => t.type === 'expense');
-      
-      const totalIncome = income.reduce((sum, t) => sum + Number(t.amount), 0);
-      const totalExpenses = expenses.reduce((sum, t) => sum + Number(t.amount), 0);
-      const netProfit = totalIncome - totalExpenses;
-
-      return {
-        title: `${t('reports.types.pnl')} (${t(`reports.dateRanges.${dateRange}`)})`,
-        metrics: [
-          { label: t('reports.metrics.totalIncome'), value: formatCurrency(totalIncome) },
-          { label: t('reports.metrics.totalExpenses'), value: formatCurrency(totalExpenses) },
-          { label: t('reports.metrics.netProfit'), value: formatCurrency(netProfit) },
-        ],
-        tableHeaders: [t('reports.table.type'), t('reports.table.count'), t('reports.table.amount')],
-        tableData: [
-          [t('reports.types.sales'), income.length.toString(), formatCurrency(totalIncome)],
-          [t('reports.types.expense'), expenses.length.toString(), formatCurrency(totalExpenses)],
-          [t('reports.metrics.netProfit'), '', formatCurrency(netProfit)]
-        ]
-      };
-    }
+    return {
+      title: `${t('reports.types.pnl')} (${t(`reports.dateRanges.${dateRange}`)})`,
+      metrics: [
+        { label: t('reports.metrics.totalIncome'), value: formatCurrency(periodIncome) },
+        { label: t('reports.metrics.totalExpenses'), value: formatCurrency(periodExpenses) },
+        { label: t('reports.metrics.netProfit'), value: formatCurrency(netProfit) },
+      ],
+      tableHeaders: [t('reports.table.type'), t('reports.table.count'), t('reports.table.amount')],
+      tableData: [
+        [t('reports.types.sales'), income.length.toString(), formatCurrency(periodIncome)],
+        [t('reports.types.expense'), expenses.length.toString(), formatCurrency(periodExpenses)],
+        [t('reports.metrics.netProfit'), '', formatCurrency(netProfit)]
+      ]
+    };
   };
 
   const generateStockReport = (products) => {
@@ -327,68 +238,65 @@ const ReportsScreen = ({ navigation, businessId, route }) => {
       Alert.alert(t('common.error'), t('reports.selectType'));
       return;
     }
-
-    // Debug logging
-    console.log('BusinessId from props:', businessId);
-    console.log('BusinessId from route:', route?.params?.businessId);
-    console.log('Current BusinessId:', currentBusinessId);
-
     if (!currentBusinessId) {
       Alert.alert(t('common.error'), 'Business ID is required. Please ensure you have a business selected.');
       return;
     }
-
     setLoading(true);
-
     try {
       let reportData;
-
       if (selectedReport === 'stock') {
         const products = await fetchStockData();
         reportData = generateStockReport(products);
       } else {
         const transactions = await fetchTransactionData(selectedReport, selectedDateRange);
-        
         switch (selectedReport) {
-          case 'sales':
-            reportData = generateSalesReport(transactions, selectedDateRange);
-            break;
-          case 'expense':
-            reportData = generateExpenseReport(transactions, selectedDateRange);
-            break;
-          case 'pnl':
-            reportData = await generatePnLReport(transactions, selectedDateRange);
-            break;
-          default:
-            throw new Error('Unknown report type');
+          case 'sales': reportData = generateSalesReport(transactions, selectedDateRange); break;
+          case 'expense': reportData = generateExpenseReport(transactions, selectedDateRange); break;
+          case 'pnl': reportData = await generatePnLReport(transactions, selectedDateRange); break;
+          default: throw new Error('Unknown report type');
         }
       }
-
       setGeneratedReport(reportData);
     } catch (error) {
       console.error('Error generating report:', error);
-      Alert.alert(
-        t('common.error'),
-        'Failed to generate report. Please try again.'
-      );
+      Alert.alert(t('common.error'), 'Failed to generate report. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const bottomNavItems = [
+    { route: 'Home', label: t('home.bottomNav.home'), icon: 'home' },
+    { route: 'Inventory', label: t('home.bottomNav.inventory'), icon: 'inventory' },
+    { route: 'Ledger', label: t('home.bottomNav.ledger'), icon: 'account-balance-wallet' },
+    { route: 'CRM', label: t('home.bottomNav.crm'), icon: 'people' },
+    { route: 'Reports', label: t('home.bottomNav.reports'), icon: 'assessment' },
+  ];
+
   const renderReportGenerator = () => (
     <View>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('reports.selectType')}</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('reports.selectType')}</Text>
         <View style={styles.reportTypeGrid}>
           {REPORT_TYPES.map(report => (
             <TouchableOpacity
               key={report.key}
-              style={[styles.reportTypeCard, selectedReport === report.key && styles.reportTypeCardActive]}
+              style={[
+                styles.reportTypeCard,
+                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                selectedReport === report.key && { borderColor: theme.colors.primary, backgroundColor: `${theme.colors.primary}10` }
+              ]}
               onPress={() => setSelectedReport(report.key)}
             >
               <Icon name={report.icon} size={28} color={selectedReport === report.key ? theme.colors.primary : theme.colors.subtleText} />
-              <Text style={[styles.reportTypeName, selectedReport === report.key && styles.reportTypeNameActive]}>{t(`reports.types.${report.key}`)}</Text>
+              <Text style={[
+                styles.reportTypeName,
+                { color: theme.colors.subtleText },
+                selectedReport === report.key && { color: theme.colors.primary }
+              ]}>
+                {t(`reports.types.${report.key}`)}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -396,19 +304,33 @@ const ReportsScreen = ({ navigation, businessId, route }) => {
 
       {selectedReport !== 'stock' && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('reports.chooseDate')}</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('reports.chooseDate')}</Text>
           <View style={styles.dateRangeContainer}>
-              {DATE_RANGES.filter(range => range !== 'custom').map(range => (
-                  <TouchableOpacity key={range} style={[styles.dateRangeButton, selectedDateRange === range && styles.dateRangeButtonActive]} onPress={() => setSelectedDateRange(range)}>
-                      <Text style={[styles.dateRangeText, selectedDateRange === range && styles.dateRangeTextActive]}>{t(`reports.dateRanges.${range}`)}</Text>
-                  </TouchableOpacity>
-              ))}
+            {DATE_RANGES.filter(range => range !== 'custom').map(range => (
+              <TouchableOpacity
+                key={range}
+                style={[
+                  styles.dateRangeButton,
+                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                  selectedDateRange === range && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
+                ]}
+                onPress={() => setSelectedDateRange(range)}
+              >
+                <Text style={[
+                  styles.dateRangeText,
+                  { color: theme.colors.text },
+                  selectedDateRange === range && { color: theme.colors.white }
+                ]}>
+                  {t(`reports.dateRanges.${range}`)}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
       )}
 
       <TouchableOpacity
-        style={[styles.primaryButton, (!selectedReport || loading) && { opacity: 0.5 }]}
+        style={[styles.primaryButton, { backgroundColor: theme.colors.primary }, theme.shadow, (!selectedReport || loading) && { opacity: 0.5 }]}
         onPress={handleGenerateReport}
         disabled={!selectedReport || loading}
       >
@@ -416,7 +338,7 @@ const ReportsScreen = ({ navigation, businessId, route }) => {
           <ActivityIndicator size="small" color={theme.colors.white} />
         ) : (
           <>
-            <Text style={styles.primaryButtonText}>{t('reports.generate')}</Text>
+            <Text style={[styles.primaryButtonText, { color: theme.colors.white }]}>{t('reports.generate')}</Text>
             <Icon name="assessment" size={24} color={theme.colors.white} />
           </>
         )}
@@ -426,79 +348,95 @@ const ReportsScreen = ({ navigation, businessId, route }) => {
 
   const renderGeneratedReport = () => (
     <ScrollView>
-        <View style={styles.reportHeader}>
-            <Text style={styles.reportTitle}>{generatedReport.title}</Text>
-            <TouchableOpacity onPress={() => setGeneratedReport(null)}>
-                <Text style={styles.newReportLink}>{t('reports.generateNew')}</Text>
-            </TouchableOpacity>
-        </View>
-
-        {/* Chart Placeholder */}
-        <View style={styles.chartPlaceholder}>
-            <Icon name="bar-chart" size={64} color={`${theme.colors.primary}50`} />
-            <Text style={styles.chartPlaceholderText}>{t('reports.chartPlaceholder')}</Text>
-        </View>
-
-        {/* Key Metrics */}
-        <View style={styles.metricsContainer}>
-            {generatedReport.metrics.map(metric => (
-                <View key={metric.label} style={styles.metricItem}>
-                    <Text style={styles.metricLabel}>{metric.label}</Text>
-                    <Text style={styles.metricValue}>{metric.value}</Text>
-                </View>
-            ))}
-        </View>
-
-        {/* Data Table */}
-        <View style={styles.tableContainer}>
-            <View style={styles.tableHeader}>
-                {generatedReport.tableHeaders.map(header => <Text key={header} style={styles.tableHeaderText}>{header}</Text>)}
-            </View>
-            {generatedReport.tableData.map((row, index) => (
-                <View key={index} style={styles.tableRow}>
-                    {row.map((cell, cellIndex) => <Text key={cellIndex} style={styles.tableCellText}>{cell}</Text>)}
-                </View>
-            ))}
-        </View>
-
-        <TouchableOpacity 
-          style={styles.primaryButton}
-          onPress={() => {
-            Alert.alert(
-              t('reports.shareTitle'),
-              t('reports.shareBody'),
-              [
-                { text: t('reports.options.downloadPdf'), onPress: () => Alert.alert('Feature Coming Soon', '') },
-                { text: t('reports.options.shareEmail'), onPress: () => Alert.alert('Feature Coming Soon', '') },
-                { text: t('reports.options.exportExcel'), onPress: () => Alert.alert('Feature Coming Soon', '') },
-                { text: t('reports.options.cancel'), style: 'cancel' }
-              ]
-            );
-          }}
-        >
-            <Text style={styles.primaryButtonText}>{t('reports.share')}</Text>
-            <Icon name="share" size={20} color={theme.colors.white} />
+      <View style={styles.reportHeader}>
+        <Text style={[styles.reportTitle, { color: theme.colors.text }]}>{generatedReport.title}</Text>
+        <TouchableOpacity onPress={() => setGeneratedReport(null)}>
+          <Text style={[styles.newReportLink, { color: theme.colors.primary }]}>{t('reports.generateNew')}</Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={[styles.chartPlaceholder, { backgroundColor: `${theme.colors.primary}10`, borderColor: `${theme.colors.primary}20` }]}>
+        <Icon name="bar-chart" size={64} color={`${theme.colors.primary}50`} />
+        <Text style={[styles.chartPlaceholderText, { color: `${theme.colors.primary}99` }]}>{t('reports.chartPlaceholder')}</Text>
+      </View>
+
+      <View style={styles.metricsContainer}>
+        {generatedReport.metrics.map(metric => (
+          <View key={metric.label} style={styles.metricItem}>
+            <Text style={[styles.metricLabel, { color: theme.colors.subtleText }]}>{metric.label}</Text>
+            <Text style={[styles.metricValue, { color: theme.colors.primary }]}>{metric.value}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={[styles.tableContainer, { backgroundColor: theme.colors.surface }, theme.shadow]}>
+        <View style={[styles.tableHeader, { borderBottomColor: theme.colors.border }]}>
+          {generatedReport.tableHeaders.map(header => <Text key={header} style={[styles.tableHeaderText, { color: theme.colors.text }]}>{header}</Text>)}
+        </View>
+        {generatedReport.tableData.map((row, index) => (
+          <View key={index} style={[styles.tableRow, { borderBottomColor: theme.colors.border }]}>
+            {row.map((cell, cellIndex) => <Text key={cellIndex} style={[styles.tableCellText, { color: theme.colors.subtleText }]}>{cell}</Text>)}
+          </View>
+        ))}
+      </View>
+
+      <TouchableOpacity
+        style={[styles.primaryButton, { backgroundColor: theme.colors.primary }, theme.shadow]}
+        onPress={() => {
+          Alert.alert(
+            t('reports.shareTitle'),
+            t('reports.shareBody'),
+            [
+              { text: t('reports.options.downloadPdf'), onPress: () => Alert.alert('Feature Coming Soon', '') },
+              { text: t('reports.options.shareEmail'), onPress: () => Alert.alert('Feature Coming Soon', '') },
+              { text: t('reports.options.exportExcel'), onPress: () => Alert.alert('Feature Coming Soon', '') },
+              { text: t('reports.options.cancel'), style: 'cancel' }
+            ]
+          );
+        }}
+      >
+        <Text style={[styles.primaryButtonText, { color: theme.colors.white }]}>{t('reports.share')}</Text>
+        <Icon name="share" size={20} color={theme.colors.white} />
+      </TouchableOpacity>
     </ScrollView>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
-      
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={theme.dark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
+
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
           <Icon name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={theme.typography.h1}>Reports</Text>
+        <Text style={[theme.typography.h1, { color: theme.colors.text }]}>Reports</Text>
         <View style={styles.placeholder} />
       </View>
 
-      <View style={{flex: 1}}>
+      <View style={{ flex: 1 }}>
         {generatedReport ? renderGeneratedReport() : renderReportGenerator()}
+      </View>
+
+      {/* BOTTOM NAVIGATION */}
+      <View style={[styles.bottomNav, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
+        {bottomNavItems.map((item) => (
+          <TouchableOpacity
+            key={item.route}
+            style={styles.bottomNavItem}
+            onPress={() => {
+              setSelectedTab(item.route);
+              if (item.route !== 'Reports') {
+                navigation.navigate(item.route === 'Home' ? 'Home' : `${item.route}Screen`);
+              }
+            }}
+          >
+            <Icon name={item.icon} size={28} color={selectedTab === item.route ? theme.colors.primary : theme.colors.subtleText} />
+            <Text style={[styles.bottomNavText, { color: theme.colors.subtleText }, selectedTab === item.route && { color: theme.colors.primary }]}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
     </SafeAreaView>
   );
@@ -507,31 +445,30 @@ const ReportsScreen = ({ navigation, businessId, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: Platform.OS === 'android' ? theme.spacing.lg : theme.spacing.sm,
-    paddingBottom: theme.spacing.md,
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? 24 : 8,
+    paddingBottom: 16,
   },
   backButton: {
-    padding: theme.spacing.sm,
-    marginLeft: -theme.spacing.sm,
+    padding: 8,
+    marginLeft: -8,
   },
   placeholder: {
     width: 32,
   },
   section: {
-    paddingHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
+    paddingHorizontal: 24,
+    marginBottom: 24,
   },
   sectionTitle: {
-    ...theme.typography.h2,
+    fontFamily: 'Poppins-SemiBold',
     fontSize: 18,
-    marginBottom: theme.spacing.md,
+    marginBottom: 16,
   },
   reportTypeGrid: {
     flexDirection: 'row',
@@ -540,142 +477,123 @@ const styles = StyleSheet.create({
   },
   reportTypeCard: {
     width: '48%',
-    backgroundColor: theme.colors.surface,
-    padding: theme.spacing.lg,
-    borderRadius: theme.borderRadius.md,
+    padding: 24,
+    borderRadius: 16,
     alignItems: 'center',
-    marginBottom: theme.spacing.md,
+    marginBottom: 16,
     borderWidth: 2,
-    borderColor: theme.colors.border,
-  },
-  reportTypeCardActive: {
-    borderColor: theme.colors.primary,
-    backgroundColor: `${theme.colors.primary}10`,
   },
   reportTypeName: {
-    ...theme.typography.body,
     fontSize: 15,
     fontFamily: 'Poppins-Medium',
-    color: theme.colors.subtleText,
-    marginTop: theme.spacing.sm,
-  },
-  reportTypeNameActive: {
-    color: theme.colors.primary,
+    marginTop: 8,
   },
   dateRangeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
   dateRangeButton: {
-    backgroundColor: theme.colors.surface,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.borderRadius.full,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  dateRangeButtonActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
   },
   dateRangeText: {
-    ...theme.typography.subtext,
     fontFamily: 'Poppins-Medium',
-  },
-  dateRangeTextActive: {
-    color: theme.colors.white,
+    fontSize: 14,
   },
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.primary,
-    margin: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.borderRadius.full,
-    ...theme.shadow,
+    margin: 24,
+    paddingVertical: 16,
+    borderRadius: 999,
   },
   primaryButtonText: {
-    ...theme.typography.body,
     fontFamily: 'Poppins-SemiBold',
-    color: theme.colors.white,
-    marginRight: theme.spacing.sm,
+    fontSize: 16,
+    marginRight: 8,
   },
   // Generated Report Styles
   reportHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingHorizontal: theme.spacing.lg,
-      paddingVertical: theme.spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
   },
   reportTitle: {
-      ...theme.typography.h2,
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 20,
   },
   newReportLink: {
-      ...theme.typography.subtext,
-      color: theme.colors.primary,
-      fontFamily: 'Poppins-SemiBold',
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 14,
   },
   chartPlaceholder: {
-      height: 200,
-      backgroundColor: `${theme.colors.primary}10`,
-      marginHorizontal: theme.spacing.lg,
-      borderRadius: theme.borderRadius.md,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: `${theme.colors.primary}20`,
+    height: 200,
+    marginHorizontal: 24,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
   },
   chartPlaceholderText: {
-      ...theme.typography.subtext,
-      color: `${theme.colors.primary}99`,
-      marginTop: theme.spacing.sm,
+    fontFamily: 'Poppins-Regular',
+    fontSize: 14,
+    marginTop: 8,
   },
   metricsContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      padding: theme.spacing.lg,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    padding: 24,
   },
   metricItem: {
-      alignItems: 'center',
+    alignItems: 'center',
   },
   metricLabel: {
-      ...theme.typography.subtext,
+    fontFamily: 'Poppins-Regular',
+    fontSize: 14,
   },
   metricValue: {
-      ...theme.typography.h2,
-      color: theme.colors.primary,
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 20,
   },
   tableContainer: {
-      marginHorizontal: theme.spacing.lg,
-      backgroundColor: theme.colors.surface,
-      borderRadius: theme.borderRadius.md,
-      ...theme.shadow,
-      marginBottom: theme.spacing.md,
+    marginHorizontal: 24,
+    borderRadius: 16,
+    marginBottom: 16,
   },
   tableHeader: {
-      flexDirection: 'row',
-      padding: theme.spacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
+    flexDirection: 'row',
+    padding: 16,
+    borderBottomWidth: 1,
   },
   tableHeaderText: {
-      flex: 1,
-      ...theme.typography.label,
-      fontFamily: 'Poppins-SemiBold',
-      color: theme.colors.text,
+    flex: 1,
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 12,
   },
   tableRow: {
-      flexDirection: 'row',
-      padding: theme.spacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
+    flexDirection: 'row',
+    padding: 16,
+    borderBottomWidth: 1,
   },
   tableCellText: {
-      flex: 1,
-      ...theme.typography.subtext,
+    flex: 1,
+    fontFamily: 'Poppins-Regular',
+    fontSize: 14,
   },
+  // Bottom Nav
+  bottomNav: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    paddingVertical: 8,
+    paddingBottom: 21,
+  },
+  bottomNavItem: { flex: 1, alignItems: 'center' },
+  bottomNavText: { fontFamily: 'Poppins-Medium', fontSize: 12, marginTop: 4 },
 });
 
 export default ReportsScreen;

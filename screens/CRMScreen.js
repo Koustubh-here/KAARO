@@ -24,42 +24,9 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useI18n } from '../i18n/I18nProvider';
-import { supabase } from '../lib/supabaseClient'; // Assuming you have supabase client
+import { supabase } from '../lib/supabaseClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// THEME & DESIGN SYSTEM (Consistent with other screens)
-const theme = {
-  colors: {
-    primary: '#4A69E2',
-    background: '#F7F8FC',
-    surface: '#FFFFFF',
-    text: '#121212',
-    subtleText: '#6E717A',
-    success: '#2E7D32',
-    danger: '#C62828',
-    warning: '#FFAB00',
-    border: '#E8E9F1',
-    white: '#FFFFFF',
-  },
-  spacing: {
-    xs: 4, sm: 8, md: 16, lg: 24, xl: 32,
-  },
-  typography: {
-    h1: { fontFamily: 'Poppins-Bold', fontSize: 28, color: '#121212' },
-    h2: { fontFamily: 'Poppins-SemiBold', fontSize: 20, color: '#121212' },
-    body: { fontFamily: 'Poppins-Regular', fontSize: 16, color: '#6E717A' },
-    subtext: { fontFamily: 'Poppins-Regular', fontSize: 14, color: '#6E717A' },
-    label: { fontFamily: 'Poppins-Medium', fontSize: 12, color: '#6E717A' },
-  },
-  borderRadius: { sm: 8, md: 16, lg: 24, full: 999 },
-  shadow: {
-    shadowColor: '#4A69E2',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-};
+import { useTheme } from '../context/ThemeContext'; // ADDED
 
 const CAMPAIGN_CHANNELS = [
   { key: 'sms', name: 'SMS', icon: 'sms' },
@@ -68,6 +35,7 @@ const CAMPAIGN_CHANNELS = [
 ];
 
 const CRMScreen = ({ navigation }) => {
+  const { theme } = useTheme(); // ADDED
   const { t } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
   const [isCampaignModalVisible, setCampaignModalVisible] = useState(false);
@@ -75,6 +43,7 @@ const CRMScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [businessId, setBusinessId] = useState(null);
   const [sendingCampaign, setSendingCampaign] = useState(false);
+  const [selectedTab, setSelectedTab] = useState('CRM');
 
   // Campaign State
   const [campaignChannel, setCampaignChannel] = useState('sms');
@@ -89,8 +58,7 @@ const CRMScreen = ({ navigation }) => {
   const loadBusinessData = async () => {
     try {
       setLoading(true);
-      
-      // Get user from auth
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         Alert.alert('Error', 'Please log in to access CRM');
@@ -98,7 +66,6 @@ const CRMScreen = ({ navigation }) => {
         return;
       }
 
-      // Get user's business
       const { data: business, error: businessError } = await supabase
         .from('businesses')
         .select('id')
@@ -112,8 +79,7 @@ const CRMScreen = ({ navigation }) => {
       }
 
       setBusinessId(business.id);
-      
-      // Load customers for this business
+
       await loadCustomers(business.id);
     } catch (error) {
       console.error('Error loading business data:', error);
@@ -142,7 +108,7 @@ const CRMScreen = ({ navigation }) => {
   const filteredCustomers = useMemo(() => {
     if (!searchQuery) return customers;
     const lowercasedQuery = searchQuery.toLowerCase();
-    return customers.filter(c => 
+    return customers.filter(c =>
       c.name.toLowerCase().includes(lowercasedQuery) ||
       (c.phone && c.phone.includes(searchQuery)) ||
       (c.email && c.email.toLowerCase().includes(lowercasedQuery))
@@ -151,7 +117,6 @@ const CRMScreen = ({ navigation }) => {
 
   const sendSMS = async (phone, message) => {
     try {
-      // For SMS, we can use the device's SMS capability
       const url = `sms:${phone}?body=${encodeURIComponent(message)}`;
       const supported = await Linking.canOpenURL(url);
       if (supported) {
@@ -168,19 +133,12 @@ const CRMScreen = ({ navigation }) => {
 
   const sendBulkEmail = async (emails, message, subject = 'Campaign Message') => {
     try {
-      // Create comma-separated email list for BCC to protect customer privacy
       const emailList = emails.join(',');
-      
-      // Use BCC to send to all customers at once while protecting their privacy
       const url = `mailto:?bcc=${encodeURIComponent(emailList)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
-      
-      // Try to open email client
       await Linking.openURL(url);
       return true;
     } catch (error) {
       console.error('Email Error:', error);
-      
-      // If mailto fails, try Gmail web with BCC
       try {
         const emailList = emails.join(',');
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&bcc=${encodeURIComponent(emailList)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
@@ -199,13 +157,11 @@ const CRMScreen = ({ navigation }) => {
   };
 
   const sendEmail = async (email, message, subject = 'Campaign Message') => {
-    // This function is now used for individual customer emails only
     return sendBulkEmail([email], message, subject);
   };
 
   const sendWhatsApp = async (phone, message) => {
     try {
-      // Clean phone number (remove any non-digits except +)
       const cleanPhone = phone.replace(/[^\d+]/g, '');
       const url = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
       const supported = await Linking.canOpenURL(url);
@@ -213,7 +169,6 @@ const CRMScreen = ({ navigation }) => {
         await Linking.openURL(url);
         return true;
       } else {
-        // Fallback to web WhatsApp
         const webUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
         await Linking.openURL(webUrl);
         return true;
@@ -251,38 +206,30 @@ const CRMScreen = ({ navigation }) => {
     setSendingCampaign(true);
 
     try {
-      // Save campaign to database
       await saveCampaignToDatabase(campaignChannel, campaignAudience, campaignMessage);
 
-      // Get target customers based on selection
-      let targetCustomers = [];
-      if (campaignAudience === 'all') {
-        targetCustomers = customers;
-      } else {
-        // For specific group, let user choose or use high-value/recent customers
-        targetCustomers = customers
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-          .slice(0, Math.min(5, customers.length));
-      }
+      let targetCustomers = campaignAudience === 'all'
+        ? customers
+        : customers.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, Math.min(5, customers.length));
 
-      // Filter customers based on channel requirements
       const eligibleCustomers = targetCustomers.filter(customer => {
-        switch (campaignChannel) {
-          case 'sms':
-          case 'whatsapp':
-            return customer.phone && customer.phone.trim() !== '';
-          case 'email':
-            return customer.email && customer.email.trim() !== '';
-          default:
-            return false;
-        }
+        return campaignChannel === 'email' ? (customer.email && customer.email.trim() !== '') : (customer.phone && customer.phone.trim() !== '');
       });
 
       if (eligibleCustomers.length === 0) {
-        Alert.alert(
-          'No Eligible Customers', 
-          `No customers have ${campaignChannel === 'email' ? 'email addresses' : 'phone numbers'} for this campaign.`
-        );
+        Alert.alert('No Eligible Customers', `No customers have ${campaignChannel === 'email' ? 'email addresses' : 'phone numbers'} for this campaign.`);
+        setSendingCampaign(false);
+        return;
+      }
+
+      const proceed = await new Promise((resolve) => {
+        Alert.alert('Confirm Campaign', `Send ${campaignChannel.toUpperCase()} to ${eligibleCustomers.length} customers?`, [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Send', onPress: () => resolve(true) }
+        ]);
+      });
+
+      if (!proceed) {
         setSendingCampaign(false);
         return;
       }
@@ -291,56 +238,23 @@ const CRMScreen = ({ navigation }) => {
       let failureCount = 0;
       const failedCustomers = [];
 
-      // Show confirmation before sending
-      const proceed = await new Promise((resolve) => {
-        Alert.alert(
-          'Confirm Campaign',
-          `Send ${campaignChannel.toUpperCase()} to ${eligibleCustomers.length} customers?`,
-          [
-            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Send', onPress: () => resolve(true) }
-          ]
-        );
-      });
-
-      if (!proceed) {
-        setSendingCampaign(false);
-        return;
-      }
-
-      // Send messages based on channel
       if (campaignChannel === 'email') {
-        // For email campaigns, send all at once using BCC
-        const emails = eligibleCustomers.map(c => c.email).filter(email => email && email.trim() !== '');
-        
+        const emails = eligibleCustomers.map(c => c.email).filter(Boolean);
         if (emails.length > 0) {
           const success = await sendBulkEmail(emails, campaignMessage, 'Marketing Campaign');
-          if (success) {
-            successCount = emails.length;
-            failureCount = 0;
-          } else {
-            successCount = 0;
-            failureCount = emails.length;
-          }
+          successCount = success ? emails.length : 0;
+          failureCount = success ? 0 : emails.length;
         }
       } else {
-        // For SMS/WhatsApp, send individually as these don't support bulk
         for (const customer of eligibleCustomers) {
           let success = false;
-
           try {
-            switch (campaignChannel) {
-              case 'sms':
-                success = await sendSMS(customer.phone, campaignMessage);
-                break;
-              case 'whatsapp':
-                success = await sendWhatsApp(customer.phone, campaignMessage);
-                break;
-            }
+            success = campaignChannel === 'sms'
+              ? await sendSMS(customer.phone, campaignMessage)
+              : await sendWhatsApp(customer.phone, campaignMessage);
 
-            if (success) {
-              successCount++;
-            } else {
+            if (success) successCount++;
+            else {
               failureCount++;
               failedCustomers.push(customer.name);
             }
@@ -349,30 +263,23 @@ const CRMScreen = ({ navigation }) => {
             failureCount++;
             failedCustomers.push(customer.name);
           }
-
-          // Small delay between sends to avoid overwhelming the system
           await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
 
       setCampaignModalVisible(false);
-      
-      // Show detailed results
+
       let resultMessage = `Campaign Results:\n\n✅ Successful: ${successCount}\n❌ Failed: ${failureCount}`;
-      
       if (failedCustomers.length > 0 && failedCustomers.length <= 3) {
         resultMessage += `\n\nFailed customers: ${failedCustomers.join(', ')}`;
       } else if (failedCustomers.length > 3) {
         resultMessage += `\n\nSome customers couldn't be reached.`;
       }
-
       if (successCount > 0) {
         resultMessage += `\n\nNote: Messages opened in external apps for sending.`;
       }
-      
+
       Alert.alert('Campaign Complete', resultMessage, [{ text: 'OK' }]);
-      
-      // Reset state
       setCampaignMessage('');
     } catch (error) {
       console.error('Campaign error:', error);
@@ -387,57 +294,38 @@ const CRMScreen = ({ navigation }) => {
       customer.name,
       `Phone: ${customer.phone || 'N/A'}\nEmail: ${customer.email || 'N/A'}\nJoined: ${new Date(customer.created_at).toLocaleDateString()}`,
       [
-        { 
-          text: 'Call', 
-          onPress: () => {
-            if (customer.phone) {
-              Linking.openURL(`tel:${customer.phone}`);
-            } else {
-              Alert.alert('No Phone', 'This customer has no phone number');
-            }
-          }
-        },
-        { 
-          text: 'Message', 
-          onPress: () => {
-            if (customer.phone) {
-              sendSMS(customer.phone, 'Hello! Thanks for being our valued customer.');
-            } else {
-              Alert.alert('No Phone', 'This customer has no phone number');
-            }
-          }
-        },
-        { 
-          text: 'Email', 
-          onPress: () => {
-            if (customer.email) {
-              sendEmail(customer.email, 'Hello! Thanks for being our valued customer.', 'Thank You');
-            } else {
-              Alert.alert('No Email', 'This customer has no email address');
-            }
-          }
-        },
+        { text: 'Call', onPress: () => customer.phone ? Linking.openURL(`tel:${customer.phone}`) : Alert.alert('No Phone', 'This customer has no phone number') },
+        { text: 'Message', onPress: () => customer.phone ? sendSMS(customer.phone, 'Hello! Thanks for being our valued customer.') : Alert.alert('No Phone', 'This customer has no phone number') },
+        { text: 'Email', onPress: () => customer.email ? sendEmail(customer.email, 'Hello! Thanks for being our valued customer.', 'Thank You') : Alert.alert('No Email', 'This customer has no email address') },
         { text: 'Cancel', style: 'cancel' }
       ]
     );
   };
 
+  const bottomNavItems = [
+    { route: 'Home', label: t('home.bottomNav.home'), icon: 'home' },
+    { route: 'Inventory', label: t('home.bottomNav.inventory'), icon: 'inventory' },
+    { route: 'Ledger', label: t('home.bottomNav.ledger'), icon: 'account-balance-wallet' },
+    { route: 'CRM', label: t('home.bottomNav.crm'), icon: 'people' },
+    { route: 'Reports', label: t('home.bottomNav.reports'), icon: 'assessment' },
+  ];
+
   const renderCustomerItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.customerItem} 
+    <TouchableOpacity
+      style={[styles.customerItem, { borderBottomColor: theme.colors.border }]}
       onPress={() => handleCustomerPress(item)}
     >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
+      <View style={[styles.avatar, { backgroundColor: `${theme.colors.primary}20` }]}>
+        <Text style={[styles.avatarText, { color: theme.colors.primary }]}>{item.name.charAt(0).toUpperCase()}</Text>
       </View>
       <View style={styles.customerInfo}>
-        <Text style={styles.customerName}>{item.name}</Text>
-        <Text style={styles.customerDetails}>
+        <Text style={[styles.customerName, { color: theme.colors.text }]}>{item.name}</Text>
+        <Text style={[styles.customerDetails, { color: theme.colors.subtleText }]}>
           {item.phone && `📞 ${item.phone}`}
           {item.phone && item.email && ' • '}
           {item.email && `📧 ${item.email}`}
         </Text>
-        <Text style={styles.customerSubDetails}>
+        <Text style={[styles.customerSubDetails, { color: theme.colors.subtleText }]}>
           Joined: {new Date(item.created_at).toLocaleDateString()}
         </Text>
       </View>
@@ -453,93 +341,98 @@ const CRMScreen = ({ navigation }) => {
       onRequestClose={() => setCampaignModalVisible(false)}
     >
       <View style={styles.modalBackdrop}>
-        <View style={styles.modalContainer}>
+        <View style={[styles.modalContainer, { backgroundColor: theme.colors.surface }]}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Launch Campaign</Text>
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Launch Campaign</Text>
             <TouchableOpacity onPress={() => setCampaignModalVisible(false)}>
               <Icon name="close" size={24} color={theme.colors.subtleText} />
             </TouchableOpacity>
           </View>
-          
+
           <ScrollView>
-             {/* Channel Selection */}
-            <Text style={styles.modalSectionTitle}>Step 1: Choose Channel</Text>
+            <Text style={[styles.modalSectionTitle, { color: theme.colors.text }]}>Step 1: Choose Channel</Text>
             <View style={styles.optionGroup}>
-                {CAMPAIGN_CHANNELS.map(channel => (
-                    <TouchableOpacity 
-                      key={channel.key} 
-                      style={[styles.optionButton, campaignChannel === channel.key && styles.optionButtonActive]} 
-                      onPress={() => setCampaignChannel(channel.key)}
-                    >
-                        <Icon name={channel.icon} size={20} color={campaignChannel === channel.key ? theme.colors.primary : theme.colors.subtleText} />
-                        <Text style={[styles.optionButtonText, campaignChannel === channel.key && styles.optionButtonTextActive]}>
-                          {channel.name}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
-            </View>
-
-            {/* Audience Selection */}
-            <Text style={styles.modalSectionTitle}>Step 2: Select Audience</Text>
-            <View style={styles.optionGroup}>
-                <TouchableOpacity 
-                  style={[styles.optionButton, campaignAudience === 'all' && styles.optionButtonActive]} 
-                  onPress={() => setCampaignAudience('all')}
+              {CAMPAIGN_CHANNELS.map(channel => (
+                <TouchableOpacity
+                  key={channel.key}
+                  style={[
+                    styles.optionButton,
+                    { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+                    campaignChannel === channel.key && { backgroundColor: `${theme.colors.primary}20`, borderColor: theme.colors.primary }
+                  ]}
+                  onPress={() => setCampaignChannel(channel.key)}
                 >
-                    <Text style={[styles.optionButtonText, campaignAudience === 'all' && styles.optionButtonTextActive]}>
-                      All Customers ({customers.filter(c => 
-                        campaignChannel === 'email' 
-                          ? c.email && c.email.trim() !== '' 
-                          : c.phone && c.phone.trim() !== ''
-                      ).length})
-                    </Text>
+                  <Icon name={channel.icon} size={20} color={campaignChannel === channel.key ? theme.colors.primary : theme.colors.subtleText} />
+                  <Text style={[
+                    styles.optionButtonText,
+                    { color: theme.colors.subtleText },
+                    campaignChannel === channel.key && { color: theme.colors.primary }
+                  ]}>
+                    {channel.name}
+                  </Text>
                 </TouchableOpacity>
-                 <TouchableOpacity 
-                   style={[styles.optionButton, campaignAudience === 'specific' && styles.optionButtonActive]} 
-                   onPress={() => setCampaignAudience('specific')}
-                 >
-                    <Text style={[styles.optionButtonText, campaignAudience === 'specific' && styles.optionButtonTextActive]}>
-                      Recent Customers ({Math.min(5, customers.filter(c => 
-                        campaignChannel === 'email' 
-                          ? c.email && c.email.trim() !== '' 
-                          : c.phone && c.phone.trim() !== ''
-                      ).length)})
-                    </Text>
-                </TouchableOpacity>
+              ))}
             </View>
 
-            {/* Message Input */}
-            <Text style={styles.modalSectionTitle}>Step 3: Compose Message</Text>
+            <Text style={[styles.modalSectionTitle, { color: theme.colors.text }]}>Step 2: Select Audience</Text>
+            <View style={styles.optionGroup}>
+              <TouchableOpacity
+                style={[
+                  styles.optionButton,
+                  { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+                  campaignAudience === 'all' && { backgroundColor: `${theme.colors.primary}20`, borderColor: theme.colors.primary }
+                ]}
+                onPress={() => setCampaignAudience('all')}
+              >
+                <Text style={[styles.optionButtonText, { color: theme.colors.subtleText }, campaignAudience === 'all' && { color: theme.colors.primary }]}>
+                  All Customers ({customers.filter(c => campaignChannel === 'email' ? c.email : c.phone).length})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.optionButton,
+                  { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+                  campaignAudience === 'specific' && { backgroundColor: `${theme.colors.primary}20`, borderColor: theme.colors.primary }
+                ]}
+                onPress={() => setCampaignAudience('specific')}
+              >
+                <Text style={[styles.optionButtonText, { color: theme.colors.subtleText }, campaignAudience === 'specific' && { color: theme.colors.primary }]}>
+                  Recent Customers ({Math.min(5, customers.filter(c => campaignChannel === 'email' ? c.email : c.phone).length)})
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.modalSectionTitle, { color: theme.colors.text }]}>Step 3: Compose Message</Text>
             <TextInput
-                style={styles.messageInput}
-                placeholder={`Enter your ${campaignChannel} message here...`}
-                placeholderTextColor={theme.colors.subtleText}
-                multiline
-                value={campaignMessage}
-                onChangeText={setCampaignMessage}
+              style={[styles.messageInput, { backgroundColor: theme.colors.background, color: theme.colors.text, borderColor: theme.colors.border }]}
+              placeholder={`Enter your ${campaignChannel} message here...`}
+              placeholderTextColor={theme.colors.subtleText}
+              multiline
+              value={campaignMessage}
+              onChangeText={setCampaignMessage}
             />
             <View style={styles.templateContainer}>
-                <Text style={styles.templateText}>Quick templates: </Text>
-                <TouchableOpacity onPress={() => setCampaignMessage('🌟 Special Offer! Get 20% off on all items. Use code SAVE20. Limited time offer!')}>
-                    <Text style={styles.templateLink}>Discount Offer</Text>
-                </TouchableOpacity>
-                <Text style={styles.templateText}> • </Text>
-                <TouchableOpacity onPress={() => setCampaignMessage('🎉 Thank you for being our valued customer! Check out our latest products and services.')}>
-                    <Text style={styles.templateLink}>Thank You</Text>
-                </TouchableOpacity>
+              <Text style={[styles.templateText, { color: theme.colors.subtleText }]}>Quick templates: </Text>
+              <TouchableOpacity onPress={() => setCampaignMessage('🌟 Special Offer! Get 20% off on all items. Use code SAVE20. Limited time offer!')}>
+                <Text style={styles.templateLink}>Discount Offer</Text>
+              </TouchableOpacity>
+              <Text style={[styles.templateText, { color: theme.colors.subtleText }]}> • </Text>
+              <TouchableOpacity onPress={() => setCampaignMessage('🎉 Thank you for being our valued customer! Check out our latest products and services.')}>
+                <Text style={styles.templateLink}>Thank You</Text>
+              </TouchableOpacity>
             </View>
           </ScrollView>
 
-          <TouchableOpacity 
-            style={[styles.primaryButton, (!campaignMessage || sendingCampaign) && {opacity: 0.5}]} 
-            onPress={handleStartCampaign} 
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: theme.colors.primary }, (!campaignMessage || sendingCampaign) && { opacity: 0.5 }]}
+            onPress={handleStartCampaign}
             disabled={!campaignMessage || sendingCampaign}
           >
             {sendingCampaign ? (
               <ActivityIndicator size="small" color={theme.colors.white} />
             ) : (
               <>
-                <Text style={styles.primaryButtonText}>Send Campaign</Text>
+                <Text style={[styles.primaryButtonText, { color: theme.colors.white }]}>Send Campaign</Text>
                 <Icon name="send" size={20} color={theme.colors.white} />
               </>
             )}
@@ -551,9 +444,9 @@ const CRMScreen = ({ navigation }) => {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]}>
+      <SafeAreaView style={[styles.container, styles.centered, { backgroundColor: theme.colors.background }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={[theme.typography.body, { marginTop: theme.spacing.md }]}>
+        <Text style={[theme.typography.body, { marginTop: theme.spacing.md, color: theme.colors.text }]}>
           Loading customers...
         </Text>
       </SafeAreaView>
@@ -561,25 +454,25 @@ const CRMScreen = ({ navigation }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={theme.dark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
       {renderCampaignModal()}
 
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
           <Icon name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={theme.typography.h1}>CRM</Text>
+        <Text style={[theme.typography.h1, { color: theme.colors.text }]}>CRM</Text>
         <View style={styles.placeholder} />
       </View>
 
-      <View style={styles.searchContainer}>
+      <View style={[styles.searchContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
         <Icon name="search" size={24} color={theme.colors.subtleText} style={styles.searchIcon} />
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: theme.colors.text }]}
           placeholder="Search customers..."
           placeholderTextColor={theme.colors.subtleText}
           value={searchQuery}
@@ -587,24 +480,24 @@ const CRMScreen = ({ navigation }) => {
         />
       </View>
 
-      <TouchableOpacity 
-        style={[styles.primaryButton, customers.length === 0 && { opacity: 0.5 }]} 
+      <TouchableOpacity
+        style={[styles.primaryButton, { backgroundColor: theme.colors.primary }, theme.shadow, customers.length === 0 && { opacity: 0.5 }]}
         onPress={() => setCampaignModalVisible(true)}
         disabled={customers.length === 0}
       >
-        <Text style={styles.primaryButtonText}>
+        <Text style={[styles.primaryButtonText, { color: theme.colors.white }]}>
           {customers.length === 0 ? 'No Customers Yet' : 'Start Campaign'}
         </Text>
         <Icon name="campaign" size={24} color={theme.colors.white} />
       </TouchableOpacity>
 
-      <View style={styles.customerListContainer}>
+      <View style={[styles.customerListContainer, { borderTopColor: theme.colors.border }]}>
         {filteredCustomers.length === 0 ? (
           <View style={styles.emptyState}>
             <Icon name="people-outline" size={64} color={theme.colors.subtleText} />
-            <Text style={[theme.typography.body, { marginTop: theme.spacing.md, textAlign: 'center' }]}>
-              {customers.length === 0 
-                ? 'No customers found.\nAdd customers to start using CRM features.' 
+            <Text style={[theme.typography.body, { marginTop: theme.spacing.md, textAlign: 'center', color: theme.colors.text }]}>
+              {customers.length === 0
+                ? 'No customers found.\nAdd customers to start using CRM features.'
                 : 'No customers match your search.'}
             </Text>
           </View>
@@ -618,6 +511,25 @@ const CRMScreen = ({ navigation }) => {
           />
         )}
       </View>
+
+      {/* BOTTOM NAVIGATION */}
+      <View style={[styles.bottomNav, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }]}>
+        {bottomNavItems.map((item) => (
+          <TouchableOpacity
+            key={item.route}
+            style={styles.bottomNavItem}
+            onPress={() => {
+              setSelectedTab(item.route);
+              if (item.route !== 'CRM') {
+                navigation.navigate(item.route === 'Home' ? 'Home' : `${item.route}Screen`);
+              }
+            }}
+          >
+            <Icon name={item.icon} size={28} color={selectedTab === item.route ? theme.colors.primary : theme.colors.subtleText} />
+            <Text style={[styles.bottomNavText, { color: theme.colors.subtleText }, selectedTab === item.route && { color: theme.colors.primary }]}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </SafeAreaView>
   );
 };
@@ -625,7 +537,6 @@ const CRMScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   centered: {
     justifyContent: 'center',
@@ -635,13 +546,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: Platform.OS === 'android' ? theme.spacing.lg : theme.spacing.sm,
-    paddingBottom: theme.spacing.md,
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? 24 : 8,
+    paddingBottom: 16,
   },
   backButton: {
-    padding: theme.spacing.sm,
-    marginLeft: -theme.spacing.sm,
+    padding: 8,
+    marginLeft: -8,
   },
   placeholder: {
     width: 32,
@@ -649,89 +560,78 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.full,
-    marginHorizontal: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.md,
+    borderRadius: 999,
+    marginHorizontal: 24,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   searchIcon: {
-    marginRight: theme.spacing.sm,
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    ...theme.typography.body,
-    color: theme.colors.text,
+    fontFamily: 'Poppins-Regular',
+    fontSize: 16,
     height: 50,
   },
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.primary,
-    margin: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.borderRadius.full,
-    ...theme.shadow,
+    margin: 24,
+    paddingVertical: 16,
+    borderRadius: 999,
   },
   primaryButtonText: {
-    ...theme.typography.body,
     fontFamily: 'Poppins-SemiBold',
-    color: theme.colors.white,
-    marginRight: theme.spacing.sm,
+    fontSize: 16,
+    marginRight: 8,
   },
   customerListContainer: {
     flex: 1,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.xl,
+    paddingHorizontal: 32,
   },
   customerItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
   },
   avatar: {
     width: 48,
     height: 48,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: `${theme.colors.primary}20`,
+    borderRadius: 999,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    color: theme.colors.primary,
     fontSize: 18,
     fontFamily: 'Poppins-Bold',
   },
   customerInfo: {
     flex: 1,
-    marginLeft: theme.spacing.md,
+    marginLeft: 16,
   },
   customerName: {
-    ...theme.typography.body,
     fontFamily: 'Poppins-Medium',
-    color: theme.colors.text,
+    fontSize: 16,
   },
   customerDetails: {
-    ...theme.typography.subtext,
     fontSize: 12,
     marginTop: 2,
+    fontFamily: 'Poppins-Regular',
   },
   customerSubDetails: {
-    ...theme.typography.subtext,
     fontSize: 11,
-    color: theme.colors.subtleText,
     marginTop: 2,
+    fontFamily: 'Poppins-Regular',
   },
   // Modal Styles
   modalBackdrop: {
@@ -740,27 +640,26 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContainer: {
-    backgroundColor: theme.colors.surface,
     height: '85%',
-    borderTopLeftRadius: theme.borderRadius.lg,
-    borderTopRightRadius: theme.borderRadius.lg,
-    padding: theme.spacing.lg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.lg,
+    marginBottom: 24,
   },
   modalTitle: {
-    ...theme.typography.h2,
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 20,
   },
   modalSectionTitle: {
-    ...theme.typography.label,
     fontFamily: 'Poppins-SemiBold',
-    color: theme.colors.text,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
+    fontSize: 12,
+    marginTop: 16,
+    marginBottom: 8,
   },
   optionGroup: {
     flexDirection: 'row',
@@ -769,54 +668,51 @@ const styles = StyleSheet.create({
   optionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.borderRadius.full,
-    marginRight: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    marginRight: 8,
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  optionButtonActive: {
-    backgroundColor: `${theme.colors.primary}20`,
-    borderColor: theme.colors.primary,
   },
   optionButtonText: {
-    ...theme.typography.subtext,
-    color: theme.colors.subtleText,
     fontFamily: 'Poppins-Medium',
-    marginLeft: theme.spacing.xs,
-  },
-  optionButtonTextActive: {
-    color: theme.colors.primary,
+    fontSize: 14,
+    marginLeft: 4,
   },
   messageInput: {
-    backgroundColor: theme.colors.background,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
+    borderRadius: 16,
+    padding: 16,
     height: 150,
     textAlignVertical: 'top',
-    ...theme.typography.body,
-    color: theme.colors.text,
+    fontFamily: 'Poppins-Regular',
+    fontSize: 16,
     borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   templateContainer: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      marginTop: theme.spacing.sm,
-      alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+    alignItems: 'center',
   },
   templateText: {
-      ...theme.typography.subtext,
+    fontFamily: 'Poppins-Regular',
+    fontSize: 14,
   },
   templateLink: {
-      ...theme.typography.subtext,
-      fontFamily: 'Poppins-SemiBold',
-      color: theme.colors.primary,
-      textDecorationLine: 'underline',
+    fontFamily: 'Poppins-SemiBold',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
+  // Bottom Nav
+  bottomNav: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    paddingVertical: 8,
+    paddingBottom: 21,
+  },
+  bottomNavItem: { flex: 1, alignItems: 'center' },
+  bottomNavText: { fontFamily: 'Poppins-Medium', fontSize: 12, marginTop: 4 },
 });
 
 export default CRMScreen;

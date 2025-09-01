@@ -27,6 +27,7 @@ import AddTransactionScreen from '../screens/AddTransactionScreen.js';
 import ProductDetailsScreen from '../screens/ProductDetailsScreen.js';
 import AddProductScreen from '../screens/AddProductScreen.js';
 import Notification from '../screens/NotificationScreen.js';
+import GeneralSettingsScreen from '../screens/GeneralSettingsScreen.js';
 
 const Stack = createNativeStackNavigator();
 
@@ -40,8 +41,7 @@ const AppNavigator = () => {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: '#F4F6F8' },
-          animation: 'slide_from_right',
-          animationDuration: 300,
+          animation: 'none', // Changed to disable screen animations
         }}
       >
         {initializing ? (
@@ -92,7 +92,7 @@ const AppNavigator = () => {
             />
             <Stack.Screen 
               name="InventoryScreen" 
-              component={InventoryScreen}
+                  component={InventoryScreen}
               options={{ gestureEnabled: true }}
             />
             <Stack.Screen 
@@ -143,6 +143,11 @@ const AppNavigator = () => {
             <Stack.Screen 
               name="NotificationScreen" 
               component={Notification}
+              options={{ gestureEnabled: true }}
+            />
+            <Stack.Screen 
+              name="GeneralSettingsScreen" 
+              component={GeneralSettingsScreen}
               options={{ gestureEnabled: true }}
             />
           </>

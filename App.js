@@ -6,20 +6,21 @@
  */
 
 import React, { useEffect } from 'react';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
+import { StatusBar, StyleSheet, View } from 'react-native';
 import AppNavigator from './navigation/AppNavigator';
 import { supabase } from './lib/supabaseClient';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { I18nProvider } from './i18n/I18nProvider';
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+const AppContent = () => {
+  const { theme, isDark } = useTheme();
 
   useEffect(() => {
     // Simple connectivity check
-  // Skip during Jest tests to avoid logging after teardown
-  if (process.env && process.env.JEST_WORKER_ID) return;
-  (async () => {
+    // Skip during Jest tests to avoid logging after teardown
+    if (process.env && process.env.JEST_WORKER_ID) return;
+    (async () => {
       try {
         const { data, error } = await supabase.from('health_check').select('id').limit(1);
         if (error) {
@@ -35,16 +36,25 @@ function App() {
   }, []);
 
   return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar 
+        barStyle={isDark ? 'light-content' : 'dark-content'} 
+        backgroundColor={theme.colors.surface}
+        translucent={false}
+      />
+      <AppNavigator />
+    </View>
+  );
+};
+
+function App() {
+  return (
     <AuthProvider>
-      <I18nProvider>
-        <View style={styles.container}>
-          <StatusBar 
-            barStyle={isDarkMode ? 'light-content' : 'dark-content'} 
-            backgroundColor="#0D47A1"
-          />
-          <AppNavigator />
-        </View>
-      </I18nProvider>
+      <ThemeProvider>
+        <I18nProvider>
+          <AppContent />
+        </I18nProvider>
+      </ThemeProvider>
     </AuthProvider>
   );
 }
